@@ -485,84 +485,68 @@
     50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); }
   }
 
-  /* ── MOBILE / RESPONSIVE ── */
-  @media (max-width: 700px) {
+  /* ── MOBILE PORTRAIT (phones in portrait) ── */
+  @media (max-width: 500px) {
     body {
       grid-template-rows: 52px 1fr 260px 38px;
       grid-template-columns: 1fr;
       height: 100dvh;
     }
-
-    header { gap: 10px; padding: 0 10px; }
+    header { gap: 8px; padding: 0 10px; }
     .logo { font-size: 13px; letter-spacing: 1px; }
-    .header-stats { gap: 14px; }
+    .header-stats { gap: 12px; flex-shrink: 0; }
     .hstat-val { font-size: 15px; }
-    /* hide Fastest and Radius on portrait phone */
     .hstat:nth-child(3), .hstat:nth-child(4) { display: none; }
-    .location-label { flex: 1; min-width: 0; }
-    .clock { font-size: 11px; }
-    .search-bar { display: none; } /* moved to footer on mobile */
-
+    .location-label { flex: 1; min-width: 0; display: flex; }
+    .clock { font-size: 11px; flex-shrink: 0; }
+    .search-bar { display: none; }
     .map-area { grid-column: 1; grid-row: 2; }
-
     .side-panel {
       grid-column: 1; grid-row: 3;
       border-left: none;
       border-top: 1px solid var(--sky-border);
       flex-direction: row;
     }
-
-    .flight-list {
-      flex: 1; min-width: 0;
-      border-right: 1px solid var(--sky-border);
-    }
-
-    .detail-card {
-      width: 190px; flex-shrink: 0;
-      border-top: none;
-      overflow-y: auto;
-      padding: 8px 10px;
-    }
-
+    .flight-list { flex: 1; min-width: 0; border-right: 1px solid var(--sky-border); }
+    .detail-card { width: 190px; flex-shrink: 0; border-top: none; overflow-y: auto; padding: 8px 10px; }
     .dc-callsign { font-size: 15px; }
     .dc-value.big { font-size: 12px; }
     .dc-apt-code { font-size: 13px; }
     .dc-grid { gap: 6px; }
-
-    footer {
-      grid-column: 1; grid-row: 4;
-      padding: 0 10px; gap: 10px;
-      font-size: 9px;
-      overflow-x: auto; white-space: nowrap;
-      scrollbar-width: none;
-    }
+    footer { grid-column: 1; grid-row: 4; padding: 0 10px; gap: 10px; font-size: 9px; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
     footer::-webkit-scrollbar { display: none; }
     .flight-item { padding: 10px 12px; }
   }
 
-  @media (max-width: 700px) and (orientation: landscape) {
+  /* ── MOBILE LANDSCAPE (phones rotated, ~568–926px wide) ── */
+  @media (max-height: 500px) and (orientation: landscape) {
     body {
-      grid-template-rows: 46px 1fr 38px;
-      grid-template-columns: 1fr 300px;
+      grid-template-rows: 44px 1fr 36px;
+      grid-template-columns: 1fr 290px;
       height: 100dvh;
     }
-    header { grid-column: 1 / -1; gap: 12px; }
-    .logo { font-size: 12px; }
-    .header-stats { gap: 12px; }
-    .hstat-val { font-size: 14px; }
+    header { grid-column: 1 / -1; gap: 10px; padding: 0 10px; }
+    .logo { font-size: 12px; letter-spacing: 1px; }
+    .header-stats { gap: 10px; flex-shrink: 0; }
+    .hstat-val { font-size: 13px; }
+    .hstat-label { font-size: 7px; }
     .hstat:nth-child(3), .hstat:nth-child(4) { display: flex; }
-    .location-label { display: flex; }
-    .clock { font-size: 11px; }
-    .search-bar { display: flex; }
+    .location-label { flex: 1; min-width: 0; display: flex; }
+    .clock { font-size: 10px; flex-shrink: 0; }
+    .search-bar { display: flex; flex-shrink: 0; }
+    .search-bar input { width: 80px; font-size: 11px; }
     .map-area { grid-column: 1; grid-row: 2; }
-    .side-panel {
-      grid-column: 2; grid-row: 2;
-      border-left: 1px solid var(--sky-border);
-      border-top: none;
-      flex-direction: column;
-    }
-    footer { grid-column: 1 / -1; grid-row: 3; }
-    .detail-card { width: 100%; border-top: 1px solid var(--sky-border); }
+    .side-panel { grid-column: 2; grid-row: 2; border-left: 1px solid var(--sky-border); border-top: none; flex-direction: column; }
+    footer { grid-column: 1 / -1; grid-row: 3; padding: 0 10px; gap: 10px; font-size: 9px; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+    footer::-webkit-scrollbar { display: none; }
+    .detail-card { width: 100%; border-top: 1px solid var(--sky-border); padding: 6px 10px; }
+    .dc-callsign { font-size: 14px; }
+    .dc-value.big { font-size: 11px; }
+    .dc-route { padding: 5px 8px; margin-bottom: 5px; }
+    .dc-apt-code { font-size: 13px; }
+    .dc-grid { gap: 4px; }
+    .panel-header { padding: 8px 12px; }
+    .flight-item { padding: 8px 12px; }
   }
 
 
@@ -820,7 +804,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v0.6';
+const VERSION = 'v0.7';
 
 const CONFIG = {
   lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
@@ -1029,6 +1013,7 @@ async function fetchFromProxy(targetUrl, proxyFn) {
 }
 
 let lastFetchErrors = [];
+let workingSource = null; // once a source works, stick to it
 
 async function tryFetch(url, options={}, timeoutMs=10000) {
   // Bare fetch with a race timeout — no AbortController, no signals
@@ -1038,6 +1023,37 @@ async function tryFetch(url, options={}, timeoutMs=10000) {
   ]);
 }
 
+// ── Fetch sources in priority order, lock to first that works ──
+const SOURCES = [
+  {
+    name: 'ADS-B (lol)',
+    fetch: (lat, lon, dist) => tryFetch(`https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`),
+    parse: async (resp) => { const d = await resp.json(); if (!Array.isArray(d.ac)) throw new Error('bad shape'); return { flights: parseAdsbLol(d.ac) }; }
+  },
+  {
+    name: 'ADS-B (one)',
+    fetch: (lat, lon, dist) => tryFetch(`https://api.adsb.one/v2/point/${lat}/${lon}/${dist}`),
+    parse: async (resp) => { const d = await resp.json(); if (!Array.isArray(d.ac)) throw new Error('bad shape'); return { flights: parseAdsbLol(d.ac) }; }
+  },
+  {
+    name: 'OpenSky',
+    fetch: (lat, lon, dist, margin) => tryFetch(OPENSKY_DIRECT(myLat, myLon, margin), {}, 8000),
+    parse: async (resp) => { const d = await resp.json(); return { flights: parseFlightsOpenSky(d.states || []) }; }
+  },
+  {
+    name: 'OpenSky (proxy)',
+    fetch: (lat, lon, dist, margin) => {
+      const proxied = CORS_PROXIES[0](OPENSKY_DIRECT(myLat, myLon, margin));
+      return tryFetch(proxied, {}, 8000);
+    },
+    parse: async (resp) => {
+      const wrapper = await resp.json();
+      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
+      return { flights: parseFlightsOpenSky(d.states || []) };
+    }
+  },
+];
+
 async function fetchFlights() {
   const dist = Math.ceil(RADAR_RADIUS_NM);
   const lat = myLat.toFixed(4);
@@ -1045,58 +1061,23 @@ async function fetchFlights() {
   const margin = Math.max(2.5, RADIUS_KM() / 111);
   lastFetchErrors = [];
 
-  // ── Source 1: adsb.lol ──
-  try {
-    const resp = await tryFetch(`https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`);
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data && Array.isArray(data.ac)) {
-        const parsed = parseAdsbLol(data.ac);
-        setSourceStatus('ok', `ADS-B · ${parsed.length} ac`);
-        return parsed;
-      }
-      lastFetchErrors.push(`adsb.lol: unexpected shape`);
-    } else { lastFetchErrors.push(`adsb.lol: HTTP ${resp.status}`); }
-  } catch(e) { lastFetchErrors.push(`adsb.lol: ${e.message}`); }
+  // If a source worked before, try it first
+  const ordered = workingSource
+    ? [SOURCES.find(s => s.name === workingSource), ...SOURCES.filter(s => s.name !== workingSource)].filter(Boolean)
+    : SOURCES;
 
-  // ── Source 2: adsb.one ──
-  try {
-    const resp = await tryFetch(`https://api.adsb.one/v2/point/${lat}/${lon}/${dist}`);
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data && Array.isArray(data.ac)) {
-        const parsed = parseAdsbLol(data.ac);
-        setSourceStatus('ok', `adsb.one · ${parsed.length} ac`);
-        return parsed;
-      }
-      lastFetchErrors.push(`adsb.one: unexpected shape`);
-    } else { lastFetchErrors.push(`adsb.one: HTTP ${resp.status}`); }
-  } catch(e) { lastFetchErrors.push(`adsb.one: ${e.message}`); }
-
-  // ── Source 3: OpenSky direct (Pi-friendly) ──
-  try {
-    const resp = await tryFetch(OPENSKY_DIRECT(myLat, myLon, margin), {}, 8000);
-    if (resp.ok) {
-      const data = await resp.json();
-      setSourceStatus('ok', 'OpenSky');
-      return parseFlightsOpenSky(data.states || []);
-    } else { lastFetchErrors.push(`opensky: HTTP ${resp.status}`); }
-  } catch(e) { lastFetchErrors.push(`opensky: ${e.message}`); }
-
-  // ── Source 4: CORS proxies ──
-  for (const proxyFn of CORS_PROXIES) {
+  for (const source of ordered) {
     try {
-      const proxied = proxyFn(OPENSKY_DIRECT(myLat, myLon, margin));
-      const resp = await tryFetch(proxied, {}, 8000);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const wrapper = await resp.json();
-      const data = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
-      setSourceStatus('ok', 'OpenSky (proxy)');
-      return parseFlightsOpenSky(data.states || []);
-    } catch(e) { lastFetchErrors.push(`proxy: ${e.message}`); }
+      const resp = await source.fetch(lat, lon, dist, margin);
+      if (!resp.ok) { lastFetchErrors.push(`${source.name}: HTTP ${resp.status}`); continue; }
+      const { flights } = await source.parse(resp);
+      workingSource = source.name; // lock to this source
+      setSourceStatus('ok', `${source.name} · ${flights.length} ac`);
+      return flights;
+    } catch(e) { lastFetchErrors.push(`${source.name}: ${e.message}`); }
   }
 
-  // ── All failed — show tappable error in status bar ──
+  // All failed
   const errSummary = lastFetchErrors.join(' | ');
   setSourceStatus('warn', 'Demo · tap SOURCE for details');
   const el = document.getElementById('status-source');
