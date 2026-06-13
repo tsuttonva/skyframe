@@ -665,13 +665,13 @@
       <div class="hstat-val" id="stat-count">—</div>
       <div class="hstat-label">Overhead</div>
     </div>
-    <div class="hstat">
+    <div class="hstat" onclick="selectStatFlight('highest')" style="cursor:pointer" title="Click to select highest flight">
       <div class="hstat-val" id="stat-highest">—</div>
-      <div class="hstat-label">Highest ft</div>
+      <div class="hstat-label">Highest ft ▲</div>
     </div>
-    <div class="hstat">
+    <div class="hstat" onclick="selectStatFlight('fastest')" style="cursor:pointer" title="Click to select fastest flight">
       <div class="hstat-val" id="stat-fastest">—</div>
-      <div class="hstat-label">Fastest kts</div>
+      <div class="hstat-label">Fastest kts ▶</div>
     </div>
     <div class="hstat">
       <div class="hstat-val" id="stat-radius">150</div>
@@ -804,7 +804,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v0.7';
+const VERSION = 'v0.8';
 
 const CONFIG = {
   lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
@@ -1024,7 +1024,33 @@ async function tryFetch(url, options={}, timeoutMs=10000) {
 }
 
 // ── Fetch sources in priority order, lock to first that works ──
+// NOTE: On iOS Safari, direct cross-origin fetches are blocked by tracking prevention.
+// So we try CORS proxies FIRST, then direct ADS-B, then OpenSky direct (Pi-only).
 const SOURCES = [
+  {
+    name: 'corsproxy→OpenSky',
+    fetch: (lat, lon, dist, margin) => {
+      const osk = OPENSKY_DIRECT(myLat, myLon, margin);
+      return tryFetch(`https://corsproxy.io/?${encodeURIComponent(osk)}`, {}, 12000);
+    },
+    parse: async (resp) => {
+      const wrapper = await resp.json();
+      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
+      return { flights: parseFlightsOpenSky(d.states || []) };
+    }
+  },
+  {
+    name: 'allorigins→OpenSky',
+    fetch: (lat, lon, dist, margin) => {
+      const osk = OPENSKY_DIRECT(myLat, myLon, margin);
+      return tryFetch(`https://api.allorigins.win/get?url=${encodeURIComponent(osk)}`, {}, 15000);
+    },
+    parse: async (resp) => {
+      const wrapper = await resp.json();
+      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
+      return { flights: parseFlightsOpenSky(d.states || []) };
+    }
+  },
   {
     name: 'ADS-B (lol)',
     fetch: (lat, lon, dist) => tryFetch(`https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`),
@@ -1039,18 +1065,6 @@ const SOURCES = [
     name: 'OpenSky',
     fetch: (lat, lon, dist, margin) => tryFetch(OPENSKY_DIRECT(myLat, myLon, margin), {}, 8000),
     parse: async (resp) => { const d = await resp.json(); return { flights: parseFlightsOpenSky(d.states || []) }; }
-  },
-  {
-    name: 'OpenSky (proxy)',
-    fetch: (lat, lon, dist, margin) => {
-      const proxied = CORS_PROXIES[0](OPENSKY_DIRECT(myLat, myLon, margin));
-      return tryFetch(proxied, {}, 8000);
-    },
-    parse: async (resp) => {
-      const wrapper = await resp.json();
-      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
-      return { flights: parseFlightsOpenSky(d.states || []) };
-    }
   },
 ];
 
@@ -1222,11 +1236,21 @@ function render() {
 
 function updateStats() {
   document.getElementById('stat-count').textContent = flights.length;
-  const alts = flights.map(f => f.baro_alt).filter(Boolean);
-  const spds = flights.map(f => f.velocity).filter(Boolean);
-  document.getElementById('stat-highest').textContent = alts.length ? Math.max(...alts).toLocaleString() : '—';
-  document.getElementById('stat-fastest').textContent = spds.length ? Math.max(...spds) : '—';
+  const alts = flights.filter(f => f.baro_alt).sort((a,b) => b.baro_alt - a.baro_alt);
+  const spds = flights.filter(f => f.velocity).sort((a,b) => b.velocity - a.velocity);
+  document.getElementById('stat-highest').textContent = alts.length ? alts[0].baro_alt.toLocaleString() : '—';
+  document.getElementById('stat-fastest').textContent = spds.length ? spds[0].velocity : '—';
   document.getElementById('panel-count').textContent = flights.length;
+}
+
+function selectStatFlight(type) {
+  let target = null;
+  if (type === 'highest') {
+    target = flights.filter(f => f.baro_alt).sort((a,b) => b.baro_alt - a.baro_alt)[0];
+  } else if (type === 'fastest') {
+    target = flights.filter(f => f.velocity).sort((a,b) => b.velocity - a.velocity)[0];
+  }
+  if (target) selectFlight(target);
 }
 
 function renderList() {

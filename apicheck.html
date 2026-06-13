@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyFrame API Diagnostics</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #060d14; color: #cce8ff; font-family: 'Courier New', monospace; padding: 20px; font-size: 13px; }
+  h1 { color: #00ff88; letter-spacing: 3px; margin-bottom: 4px; font-size: 18px; }
+  .subtitle { color: #4a7a9b; font-size: 11px; letter-spacing: 1px; margin-bottom: 24px; }
+  .section { margin-bottom: 28px; }
+  .section-title { color: #ffb830; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; border-bottom: 1px solid #1a3a5c; padding-bottom: 6px; margin-bottom: 12px; }
+  .test { background: #0d1e35; border: 1px solid #1a3a5c; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+  .test-name { color: #fff; font-size: 12px; margin-bottom: 4px; }
+  .test-url { color: #4a7a9b; font-size: 10px; margin-bottom: 8px; word-break: break-all; }
+  .test-status { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 2px; letter-spacing: 1px; flex-shrink: 0; }
+  .badge-pending { background: #2a4a6b; color: #4a7a9b; }
+  .badge-ok     { background: #003322; color: #00ff88; }
+  .badge-warn   { background: #3a2a00; color: #ffb830; }
+  .badge-err    { background: #2a0011; color: #ff4466; }
+  .test-detail  { font-size: 10px; color: #4a7a9b; }
+  .test-detail.ok   { color: #00994d; }
+  .test-detail.warn { color: #7a5200; }
+  .test-detail.err  { color: #aa2233; }
+  .timing { color: #00ccff; font-size: 10px; margin-left: auto; }
+  .data-preview { font-size: 9px; color: #2a4a6b; margin-top: 6px; border-top: 1px solid #0f2535; padding-top: 6px; word-break: break-all; max-height: 60px; overflow: hidden; }
+  .run-btn { background: #003322; border: 1px solid #00994d; color: #00ff88; font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 2px; padding: 10px 24px; cursor: pointer; border-radius: 3px; margin-bottom: 24px; }
+  .run-btn:hover { background: #00994d; color: #060d14; }
+  .run-btn:disabled { opacity: 0.4; cursor: default; }
+  .env { background: #0d1e35; border: 1px solid #1a3a5c; border-radius: 4px; padding: 12px; margin-bottom: 24px; font-size: 11px; line-height: 1.8; }
+  .env-key { color: #4a7a9b; }
+  .env-val { color: #cce8ff; }
+  .summary { background: #0a1628; border: 1px solid #1a3a5c; border-radius: 4px; padding: 14px; margin-bottom: 24px; display: none; }
+  .summary.visible { display: block; }
+  .sum-title { color: #00ff88; font-size: 12px; letter-spacing: 2px; margin-bottom: 10px; }
+  .sum-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+  .sum-label { color: #4a7a9b; }
+  .sum-val { color: #fff; }
+  .rec { background: #0d1e35; border-left: 3px solid #00ff88; padding: 10px 14px; margin-top: 12px; font-size: 11px; color: #00994d; }
+  .rec.warn { border-color: #ffb830; color: #7a5200; }
+  .rec.err  { border-color: #ff4466; color: #aa2233; }
+</style>
+</head>
+<body>
+
+<h1>◈ SKYFRAME API DIAGNOSTICS</h1>
+<div class="subtitle">Tests all data sources used by the main app · Share results with Claude when troubleshooting</div>
+
+<div class="env" id="env-info">Loading environment info...</div>
+
+<button class="run-btn" id="run-btn" onclick="runAll()">▶ RUN ALL TESTS</button>
+
+<div class="summary" id="summary"></div>
+
+<div class="section">
+  <div class="section-title">ADS-B Sources (Direct)</div>
+  <div class="test" id="test-adsbLol">
+    <div class="test-name">adsb.lol — Primary ADS-B</div>
+    <div class="test-url" id="url-adsbLol"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-adsbLol">PENDING</span><span class="timing" id="time-adsbLol"></span></div>
+    <div class="test-detail" id="detail-adsbLol">Not tested yet</div>
+    <div class="data-preview" id="preview-adsbLol"></div>
+  </div>
+  <div class="test" id="test-adsbOne">
+    <div class="test-name">adsb.one — Secondary ADS-B</div>
+    <div class="test-url" id="url-adsbOne"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-adsbOne">PENDING</span><span class="timing" id="time-adsbOne"></span></div>
+    <div class="test-detail" id="detail-adsbOne">Not tested yet</div>
+    <div class="data-preview" id="preview-adsbOne"></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">OpenSky Network (Direct)</div>
+  <div class="test" id="test-opensky">
+    <div class="test-name">OpenSky — Direct (works on Pi, usually CORS-blocked in browser)</div>
+    <div class="test-url" id="url-opensky"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-opensky">PENDING</span><span class="timing" id="time-opensky"></span></div>
+    <div class="test-detail" id="detail-opensky">Not tested yet</div>
+    <div class="data-preview" id="preview-opensky"></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">OpenSky via CORS Proxies</div>
+  <div class="test" id="test-proxy1">
+    <div class="test-name">corsproxy.io → OpenSky</div>
+    <div class="test-url" id="url-proxy1"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-proxy1">PENDING</span><span class="timing" id="time-proxy1"></span></div>
+    <div class="test-detail" id="detail-proxy1">Not tested yet</div>
+    <div class="data-preview" id="preview-proxy1"></div>
+  </div>
+  <div class="test" id="test-proxy2">
+    <div class="test-name">allorigins.win → OpenSky</div>
+    <div class="test-url" id="url-proxy2"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-proxy2">PENDING</span><span class="timing" id="time-proxy2"></span></div>
+    <div class="test-detail" id="detail-proxy2">Not tested yet</div>
+    <div class="data-preview" id="preview-proxy2"></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Geolocation</div>
+  <div class="test" id="test-geo">
+    <div class="test-name">Browser Geolocation API</div>
+    <div class="test-url">navigator.geolocation.getCurrentPosition()</div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-geo">PENDING</span><span class="timing" id="time-geo"></span></div>
+    <div class="test-detail" id="detail-geo">Not tested yet</div>
+  </div>
+  <div class="test" id="test-geocode">
+    <div class="test-name">Reverse Geocoding (Nominatim/OSM)</div>
+    <div class="test-url" id="url-geocode"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-geocode">PENDING</span><span class="timing" id="time-geocode"></span></div>
+    <div class="test-detail" id="detail-geocode">Runs after geolocation</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Enrichment APIs (Flight Detail)</div>
+  <div class="test" id="test-enrich">
+    <div class="test-name">adsb.lol /v2/icao — Aircraft type + registration</div>
+    <div class="test-url" id="url-enrich"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-enrich">PENDING</span><span class="timing" id="time-enrich"></span></div>
+    <div class="test-detail" id="detail-enrich">Not tested yet</div>
+    <div class="data-preview" id="preview-enrich"></div>
+  </div>
+  <div class="test" id="test-route">
+    <div class="test-name">adsb.lol /routeset — Flight route origin/dest</div>
+    <div class="test-url" id="url-route"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-route">PENDING</span><span class="timing" id="time-route"></span></div>
+    <div class="test-detail" id="detail-route">Not tested yet</div>
+    <div class="data-preview" id="preview-route"></div>
+  </div>
+  <div class="test" id="test-adsbdb">
+    <div class="test-name">adsbdb.com — Aircraft registration fallback</div>
+    <div class="test-url" id="url-adsbdb"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-adsbdb">PENDING</span><span class="timing" id="time-adsbdb"></span></div>
+    <div class="test-detail" id="detail-adsbdb">Not tested yet</div>
+    <div class="data-preview" id="preview-adsbdb"></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Map Data (TopoJSON CDN)</div>
+  <div class="test" id="test-topo1">
+    <div class="test-name">jsdelivr — world-atlas countries-110m</div>
+    <div class="test-url">https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json</div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-topo1">PENDING</span><span class="timing" id="time-topo1"></span></div>
+    <div class="test-detail" id="detail-topo1">Not tested yet</div>
+  </div>
+  <div class="test" id="test-topo2">
+    <div class="test-name">jsdelivr — us-atlas states-10m</div>
+    <div class="test-url">https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json</div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-topo2">PENDING</span><span class="timing" id="time-topo2"></span></div>
+    <div class="test-detail" id="detail-topo2">Not tested yet</div>
+  </div>
+</div>
+
+<script>
+// ── TEST LOCATION (use UND as default, replaced by actual GPS if available) ──
+let testLat = 47.9213, testLon = -97.0668, testLabel = 'UND (default)';
+
+function setResult(id, status, detail, timing, preview) {
+  const badge = document.getElementById('badge-' + id);
+  const det   = document.getElementById('detail-' + id);
+  const tim   = document.getElementById('time-' + id);
+  const prev  = document.getElementById('preview-' + id);
+  badge.className = `badge badge-${status}`;
+  badge.textContent = status.toUpperCase();
+  det.className = `test-detail ${status}`;
+  det.textContent = detail;
+  if (timing !== undefined) tim.textContent = `${timing}ms`;
+  if (prev && preview) prev.textContent = preview;
+}
+
+function setUrl(id, url) {
+  const el = document.getElementById('url-' + id);
+  if (el) el.textContent = url;
+}
+
+async function timedFetch(url, options = {}, timeoutMs = 10000) {
+  const t0 = Date.now();
+  try {
+    const resp = await Promise.race([
+      fetch(url, options),
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), timeoutMs))
+    ]);
+    return { resp, ms: Date.now() - t0, ok: resp.ok, status: resp.status };
+  } catch(e) {
+    return { resp: null, ms: Date.now() - t0, ok: false, error: e.message };
+  }
+}
+
+async function testGeo() {
+  const t0 = Date.now();
+  return new Promise(resolve => {
+    if (!navigator.geolocation) {
+      setResult('geo', 'err', 'navigator.geolocation not available', Date.now()-t0);
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        testLat = pos.coords.latitude;
+        testLon = pos.coords.longitude;
+        testLabel = `${testLat.toFixed(4)}°N, ${Math.abs(testLon).toFixed(4)}°W`;
+        setResult('geo', 'ok', `Got fix: ${testLabel} (accuracy: ${Math.round(pos.coords.accuracy)}m)`, Date.now()-t0);
+        // Update all URLs that depend on location
+        updateLocationUrls();
+        resolve(pos);
+      },
+      err => {
+        setResult('geo', 'err', `${err.message} (code ${err.code})`, Date.now()-t0);
+        resolve(null);
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  });
+}
+
+function updateLocationUrls() {
+  const dist = 150;
+  setUrl('adsbLol', `https://api.adsb.lol/v2/lat/${testLat.toFixed(4)}/lon/${testLon.toFixed(4)}/dist/${dist}`);
+  setUrl('adsbOne', `https://api.adsb.one/v2/point/${testLat.toFixed(4)}/${testLon.toFixed(4)}/${dist}`);
+  const osk = `https://opensky-network.org/api/states/all?lamin=${(testLat-2.5).toFixed(4)}&lomin=${(testLon-2.5).toFixed(4)}&lamax=${(testLat+2.5).toFixed(4)}&lomax=${(testLon+2.5).toFixed(4)}`;
+  setUrl('opensky', osk);
+  setUrl('proxy1', `https://corsproxy.io/?${encodeURIComponent(osk)}`);
+  setUrl('proxy2', `https://api.allorigins.win/get?url=${encodeURIComponent(osk)}`);
+  setUrl('geocode', `https://nominatim.openstreetmap.org/reverse?lat=${testLat.toFixed(4)}&lon=${testLon.toFixed(4)}&format=json`);
+  setUrl('enrich', `https://api.adsb.lol/v2/icao/a835af`);
+  setUrl('route', `https://api.adsb.lol/api/0/routeset (POST)`);
+  setUrl('adsbdb', `https://www.adsbdb.com/api/aircraft/a835af`);
+}
+
+async function testAdsbLol() {
+  const url = `https://api.adsb.lol/v2/lat/${testLat.toFixed(4)}/lon/${testLon.toFixed(4)}/dist/150`;
+  const { resp, ms, ok, error, status } = await timedFetch(url);
+  if (error) { setResult('adsbLol', 'err', `Load failed: ${error}`, ms); return; }
+  if (!ok)   { setResult('adsbLol', 'err', `HTTP ${status}`, ms); return; }
+  try {
+    const d = await resp.json();
+    const count = Array.isArray(d.ac) ? d.ac.length : '?';
+    setResult('adsbLol', 'ok', `✓ ${count} aircraft returned`, ms, JSON.stringify(d.ac?.[0] || d).slice(0,200));
+  } catch(e) { setResult('adsbLol', 'warn', `HTTP ok but parse failed: ${e.message}`, ms); }
+}
+
+async function testAdsbOne() {
+  const url = `https://api.adsb.one/v2/point/${testLat.toFixed(4)}/${testLon.toFixed(4)}/150`;
+  const { resp, ms, ok, error, status } = await timedFetch(url);
+  if (error) { setResult('adsbOne', 'err', `Load failed: ${error}`, ms); return; }
+  if (!ok)   { setResult('adsbOne', 'err', `HTTP ${status}`, ms); return; }
+  try {
+    const d = await resp.json();
+    const count = Array.isArray(d.ac) ? d.ac.length : '?';
+    setResult('adsbOne', 'ok', `✓ ${count} aircraft returned`, ms, JSON.stringify(d.ac?.[0] || d).slice(0,200));
+  } catch(e) { setResult('adsbOne', 'warn', `HTTP ok but parse failed: ${e.message}`, ms); }
+}
+
+async function testOpenSky() {
+  const url = `https://opensky-network.org/api/states/all?lamin=${(testLat-2.5).toFixed(4)}&lomin=${(testLon-2.5).toFixed(4)}&lamax=${(testLat+2.5).toFixed(4)}&lomax=${(testLon+2.5).toFixed(4)}`;
+  const { resp, ms, ok, error, status } = await timedFetch(url, {}, 12000);
+  if (error) { setResult('opensky', 'err', `Load failed: ${error}`, ms); return; }
+  if (!ok)   { setResult('opensky', 'err', `HTTP ${status} (429=rate limited, 403=blocked)`, ms); return; }
+  try {
+    const d = await resp.json();
+    const count = Array.isArray(d.states) ? d.states.length : '?';
+    setResult('opensky', 'ok', `✓ ${count} states returned`, ms, JSON.stringify(d.states?.[0]).slice(0,200));
+  } catch(e) { setResult('opensky', 'warn', `HTTP ok but parse failed: ${e.message}`, ms); }
+}
+
+async function testProxy(num, proxyFn) {
+  const osk = `https://opensky-network.org/api/states/all?lamin=${(testLat-2.5).toFixed(4)}&lomin=${(testLon-2.5).toFixed(4)}&lamax=${(testLat+2.5).toFixed(4)}&lomax=${(testLon+2.5).toFixed(4)}`;
+  const url = proxyFn(osk);
+  const { resp, ms, ok, error, status } = await timedFetch(url, {}, 15000);
+  if (error) { setResult('proxy'+num, 'err', `Load failed: ${error}`, ms); return; }
+  if (!ok)   { setResult('proxy'+num, 'err', `HTTP ${status}`, ms); return; }
+  try {
+    const wrapper = await resp.json();
+    const data = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
+    const count = Array.isArray(data.states) ? data.states.length : '?';
+    setResult('proxy'+num, 'ok', `✓ ${count} states via proxy`, ms, JSON.stringify(data.states?.[0]).slice(0,200));
+  } catch(e) { setResult('proxy'+num, 'warn', `HTTP ok but parse failed: ${e.message}`, ms); }
+}
+
+async function testGeocode(hadGeoFix) {
+  if (!hadGeoFix) { setResult('geocode', 'warn', 'Skipped — no GPS fix', undefined); return; }
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${testLat.toFixed(4)}&lon=${testLon.toFixed(4)}&format=json`;
+  const { resp, ms, ok, error } = await timedFetch(url, { headers: { 'Accept-Language': 'en' } }, 8000);
+  if (error) { setResult('geocode', 'err', `Load failed: ${error}`, ms); return; }
+  if (!ok)   { setResult('geocode', 'err', `HTTP ${resp.status}`, ms); return; }
+  try {
+    const d = await resp.json();
+    const city = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '?';
+    const state = d.address?.state || '';
+    setResult('geocode', 'ok', `✓ ${city}, ${state}`, ms);
+  } catch(e) { setResult('geocode', 'warn', `Parse failed: ${e.message}`, ms); }
+}
+
+async function testEnrichment() {
+  // Use a well-known ICAO hex for testing: UAL (United Airlines) 757
+  const testIcao = 'a835af';
+  const url = `https://api.adsb.lol/v2/icao/${testIcao}`;
+  const { resp, ms, ok, error } = await timedFetch(url, {}, 8000);
+  if (error) { setResult('enrich', 'err', `Load failed: ${error}`, ms); return; }
+  if (!ok)   { setResult('enrich', 'err', `HTTP ${resp.status}`, ms); return; }
+  try {
+    const d = await resp.json();
+    const ac = d.ac?.[0];
+    setResult('enrich', 'ok', `✓ type=${ac?.t || '?'} reg=${ac?.r || '?'}`, ms, JSON.stringify(ac).slice(0,200));
+  } catch(e) { setResult('enrich', 'warn', `Parse failed: ${e.message}`, ms); }
+
+  // Route test
+  const routeUrl = 'https://api.adsb.lol/api/0/routeset';
+  const { resp: rr, ms: rms, ok: rok, error: rerr } = await timedFetch(routeUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ planes: [{ callsign: 'UAL123', lat: testLat, lng: testLon }] })
+  }, 8000);
+  if (rerr) { setResult('route', 'err', `Load failed: ${rerr}`, rms); return; }
+  if (!rok)  { setResult('route', 'err', `HTTP ${rr.status}`, rms); return; }
+  try {
+    const rd = await rr.json();
+    setResult('route', 'ok', `✓ ${JSON.stringify(rd[0]?.airport_codes || rd).slice(0,80)}`, rms, JSON.stringify(rd).slice(0,200));
+  } catch(e) { setResult('route', 'warn', `Parse failed: ${e.message}`, rms); }
+
+  // adsbdb
+  const dbUrl = `https://www.adsbdb.com/api/aircraft/${testIcao}`;
+  const { resp: dr, ms: dms, ok: dok, error: derr } = await timedFetch(dbUrl, {}, 8000);
+  if (derr) { setResult('adsbdb', 'err', `Load failed: ${derr}`, dms); return; }
+  if (!dok)  { setResult('adsbdb', 'err', `HTTP ${dr.status}`, dms); return; }
+  try {
+    const dd = await dr.json();
+    setResult('adsbdb', 'ok', `✓ ${dd.response?.aircraft?.type || '?'}`, dms, JSON.stringify(dd.response?.aircraft).slice(0,200));
+  } catch(e) { setResult('adsbdb', 'warn', `Parse failed: ${e.message}`, dms); }
+}
+
+async function testTopo() {
+  for (const [id, url] of [
+    ['topo1', 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'],
+    ['topo2', 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'],
+  ]) {
+    const { resp, ms, ok, error } = await timedFetch(url, {}, 10000);
+    if (error) { setResult(id, 'err', `Load failed: ${error}`, ms); continue; }
+    if (!ok)   { setResult(id, 'err', `HTTP ${resp.status}`, ms); continue; }
+    try {
+      const d = await resp.json();
+      setResult(id, 'ok', `✓ ${Math.round(JSON.stringify(d).length/1024)}KB loaded, ${Object.keys(d.objects||{}).join(', ')}`, ms);
+    } catch(e) { setResult(id, 'warn', `Parse failed: ${e.message}`, ms); }
+  }
+}
+
+function buildSummary(results) {
+  const ok   = results.filter(r => r === 'ok').length;
+  const warn = results.filter(r => r === 'warn').length;
+  const err  = results.filter(r => r === 'err').length;
+  const total = results.length;
+
+  let rec = '', recClass = 'rec';
+  const badges = ['adsbLol','adsbOne','opensky','proxy1','proxy2'].map(id =>
+    document.getElementById('badge-'+id)?.textContent?.toLowerCase()
+  );
+
+  if (badges[0] === 'ok') rec = '✓ adsb.lol is working — this is the best source. Main app should use it reliably.';
+  else if (badges[1] === 'ok') rec = '✓ adsb.one is the fallback working source.';
+  else if (badges[3] === 'ok') rec = '⚠ Only corsproxy.io→OpenSky is working. Reliable but rate-limited.';
+  else if (badges[4] === 'ok') rec = '⚠ Only allorigins→OpenSky is working.';
+  else if (badges[2] === 'ok') rec = '✓ OpenSky direct works — likely running on Pi or non-browser env.';
+  else { rec = '✗ No data sources reachable. Check network, VPN, or iOS Safari tracking prevention settings.'; recClass += ' err'; }
+
+  const el = document.getElementById('summary');
+  el.className = 'summary visible';
+  el.innerHTML = `
+    <div class="sum-title">SUMMARY</div>
+    <div class="sum-row"><span class="sum-label">Location</span><span class="sum-val">${testLabel}</span></div>
+    <div class="sum-row"><span class="sum-label">Tests passed</span><span class="sum-val" style="color:#00ff88">${ok} / ${total}</span></div>
+    <div class="sum-row"><span class="sum-label">Warnings</span><span class="sum-val" style="color:#ffb830">${warn}</span></div>
+    <div class="sum-row"><span class="sum-label">Errors</span><span class="sum-val" style="color:#ff4466">${err}</span></div>
+    <div class="sum-row"><span class="sum-label">User Agent</span><span class="sum-val" style="font-size:9px">${navigator.userAgent.slice(0,80)}</span></div>
+    <div class="${recClass}">${rec}</div>
+  `;
+}
+
+async function runAll() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ RUNNING...';
+
+  // Reset all to pending
+  ['adsbLol','adsbOne','opensky','proxy1','proxy2','geo','geocode','enrich','route','adsbdb','topo1','topo2']
+    .forEach(id => {
+      const b = document.getElementById('badge-'+id);
+      if (b) { b.className = 'badge badge-pending'; b.textContent = 'TESTING'; }
+      const d = document.getElementById('detail-'+id);
+      if (d) d.textContent = 'Testing...';
+      const p = document.getElementById('preview-'+id);
+      if (p) p.textContent = '';
+      const t = document.getElementById('time-'+id);
+      if (t) t.textContent = '';
+    });
+
+  document.getElementById('summary').className = 'summary';
+
+  // Geo first so URLs update
+  updateLocationUrls();
+  const geoFix = await testGeo();
+  if (geoFix) updateLocationUrls();
+
+  // Run all others in parallel
+  await Promise.all([
+    testAdsbLol(),
+    testAdsbOne(),
+    testOpenSky(),
+    testProxy(1, url => `https://corsproxy.io/?${encodeURIComponent(url)}`),
+    testProxy(2, url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`),
+    testGeocode(!!geoFix),
+    testEnrichment(),
+    testTopo(),
+  ]);
+
+  const results = ['adsbLol','adsbOne','opensky','proxy1','proxy2','geo','geocode','enrich','route','adsbdb','topo1','topo2']
+    .map(id => document.getElementById('badge-'+id)?.textContent?.toLowerCase() || 'err');
+  buildSummary(results);
+
+  btn.disabled = false;
+  btn.textContent = '▶ RUN AGAIN';
+}
+
+// Environment info
+document.getElementById('env-info').innerHTML = `
+  <div><span class="env-key">User Agent: </span><span class="env-val">${navigator.userAgent}</span></div>
+  <div><span class="env-key">Origin: </span><span class="env-val">${location.origin}</span></div>
+  <div><span class="env-key">Protocol: </span><span class="env-val">${location.protocol}</span></div>
+  <div><span class="env-key">Geolocation API: </span><span class="env-val">${navigator.geolocation ? 'Available' : 'NOT AVAILABLE'}</span></div>
+  <div><span class="env-key">Test coords (default): </span><span class="env-val">${testLat}, ${testLon} (UND — updated after geo test)</span></div>
+`;
+updateLocationUrls();
+</script>
+</body>
+</html>
