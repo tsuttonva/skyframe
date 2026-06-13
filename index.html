@@ -97,15 +97,16 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-shrink: 1;
+    flex: 1;
     min-width: 0;
-    overflow: hidden;
+    cursor: pointer;
   }
 
   #loc-label {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
   }
 
   .clock {
@@ -545,7 +546,14 @@
       grid-template-columns: 1fr 300px;
       height: 100dvh;
     }
-    header { grid-column: 1 / -1; }
+    header { grid-column: 1 / -1; gap: 12px; }
+    .logo { font-size: 12px; }
+    .header-stats { gap: 12px; }
+    .hstat-val { font-size: 14px; }
+    .hstat:nth-child(3), .hstat:nth-child(4) { display: flex; }
+    .location-label { display: flex; }
+    .clock { font-size: 11px; }
+    .search-bar { display: flex; }
     .map-area { grid-column: 1; grid-row: 2; }
     .side-panel {
       grid-column: 2; grid-row: 2;
@@ -554,8 +562,6 @@
       flex-direction: column;
     }
     footer { grid-column: 1 / -1; grid-row: 3; }
-    .search-bar { display: flex; }
-    .hstat:nth-child(3), .hstat:nth-child(4) { display: flex; }
     .detail-card { width: 100%; border-top: 1px solid var(--sky-border); }
   }
 
@@ -692,9 +698,9 @@
       </div>
     </div>
   </div>
-  <div class="location-label">
+  <div class="location-label" onclick="showFullLocation()">
     <div class="dot"></div>
-    <span id="loc-label">Acquiring GPS…</span>
+    <span id="loc-label">Acquiring…</span>
   </div>
   <div class="search-bar">
     <input type="text" id="search-input" placeholder="Flight / tail (e.g. UAL123)" maxlength="10">
@@ -814,7 +820,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v0.5';
+const VERSION = 'v0.6';
 
 const CONFIG = {
   lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
@@ -967,6 +973,12 @@ function useConfigLocation() {
   init();
 }
 
+function showFullLocation() {
+  const label = document.getElementById('loc-label').textContent;
+  const coords = myLat ? `${myLat.toFixed(4)}°N, ${Math.abs(myLon).toFixed(4)}°W` : '';
+  alert(`Location: ${label}\n${coords}`);
+}
+
 async function reverseGeocode(lat, lon) {
   document.getElementById('loc-label').textContent = `${lat.toFixed(3)}°  ${lon.toFixed(3)}°`;
   try {
@@ -1016,69 +1028,80 @@ async function fetchFromProxy(targetUrl, proxyFn) {
   return data;
 }
 
+let lastFetchErrors = [];
+
+async function tryFetch(url, options={}, timeoutMs=10000) {
+  // Bare fetch with a race timeout — no AbortController, no signals
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+  ]);
+}
+
 async function fetchFlights() {
-  const margin = Math.max(2.5, RADIUS_KM() / 111);
   const dist = Math.ceil(RADAR_RADIUS_NM);
   const lat = myLat.toFixed(4);
   const lon = myLon.toFixed(4);
+  const margin = Math.max(2.5, RADIUS_KM() / 111);
+  lastFetchErrors = [];
 
-  // ── Source 1: adsb.lol (primary, CORS-enabled, no key needed) ──
+  // ── Source 1: adsb.lol ──
   try {
-    const url = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`;
-    const resp = await fetchWithTimeout(url, {}, 10000);
+    const resp = await tryFetch(`https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`);
     if (resp.ok) {
       const data = await resp.json();
       if (data && Array.isArray(data.ac)) {
         const parsed = parseAdsbLol(data.ac);
-        setSourceStatus('ok', `ADS-B Exchange · ${parsed.length} ac`);
+        setSourceStatus('ok', `ADS-B · ${parsed.length} ac`);
         return parsed;
       }
-    } else {
-      console.warn('adsb.lol HTTP', resp.status);
-    }
-  } catch(e) { console.warn('adsb.lol failed:', e.message); }
+      lastFetchErrors.push(`adsb.lol: unexpected shape`);
+    } else { lastFetchErrors.push(`adsb.lol: HTTP ${resp.status}`); }
+  } catch(e) { lastFetchErrors.push(`adsb.lol: ${e.message}`); }
 
-  // ── Source 2: adsb.one (alternate ADS-B, CORS-enabled) ──
+  // ── Source 2: adsb.one ──
   try {
-    const url = `https://api.adsb.one/v2/point/${lat}/${lon}/${dist}`;
-    const resp = await fetchWithTimeout(url, {}, 10000);
+    const resp = await tryFetch(`https://api.adsb.one/v2/point/${lat}/${lon}/${dist}`);
     if (resp.ok) {
       const data = await resp.json();
       if (data && Array.isArray(data.ac)) {
-        const parsed = parseAdsbLol(data.ac); // same schema
+        const parsed = parseAdsbLol(data.ac);
         setSourceStatus('ok', `adsb.one · ${parsed.length} ac`);
         return parsed;
       }
-    } else {
-      console.warn('adsb.one HTTP', resp.status);
-    }
-  } catch(e) { console.warn('adsb.one failed:', e.message); }
+      lastFetchErrors.push(`adsb.one: unexpected shape`);
+    } else { lastFetchErrors.push(`adsb.one: HTTP ${resp.status}`); }
+  } catch(e) { lastFetchErrors.push(`adsb.one: ${e.message}`); }
 
-  // ── Source 3: OpenSky direct (works on Pi, blocked in browser by CORS) ──
+  // ── Source 3: OpenSky direct (Pi-friendly) ──
   try {
-    const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
-    const resp = await fetchWithTimeout(targetUrl, {}, 8000);
+    const resp = await tryFetch(OPENSKY_DIRECT(myLat, myLon, margin), {}, 8000);
     if (resp.ok) {
       const data = await resp.json();
-      setSourceStatus('ok', 'OpenSky Network');
+      setSourceStatus('ok', 'OpenSky');
       return parseFlightsOpenSky(data.states || []);
-    } else {
-      console.warn('OpenSky HTTP', resp.status);
-    }
-  } catch(e) { console.warn('OpenSky direct failed:', e.message); }
+    } else { lastFetchErrors.push(`opensky: HTTP ${resp.status}`); }
+  } catch(e) { lastFetchErrors.push(`opensky: ${e.message}`); }
 
-  // ── Source 4: OpenSky via CORS proxies ──
+  // ── Source 4: CORS proxies ──
   for (const proxyFn of CORS_PROXIES) {
     try {
-      const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
-      const data = await fetchFromProxy(targetUrl, proxyFn);
+      const proxied = proxyFn(OPENSKY_DIRECT(myLat, myLon, margin));
+      const resp = await tryFetch(proxied, {}, 8000);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const wrapper = await resp.json();
+      const data = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
       setSourceStatus('ok', 'OpenSky (proxy)');
       return parseFlightsOpenSky(data.states || []);
-    } catch(e) { console.warn('proxy failed:', e.message); }
+    } catch(e) { lastFetchErrors.push(`proxy: ${e.message}`); }
   }
 
-  // ── Fallback: demo data ──
-  setSourceStatus('warn', 'Demo mode (no data source reachable)');
+  // ── All failed — show tappable error in status bar ──
+  const errSummary = lastFetchErrors.join(' | ');
+  setSourceStatus('warn', 'Demo · tap SOURCE for details');
+  const el = document.getElementById('status-source');
+  el.style.cursor = 'pointer';
+  el.onclick = () => alert('Data source errors:\n\n' + errSummary);
   return generateDemoFlights();
 }
 
