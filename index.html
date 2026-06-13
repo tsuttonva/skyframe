@@ -56,6 +56,7 @@
     letter-spacing: 3px;
     text-transform: uppercase;
     flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .logo span { color: var(--text-dim); }
@@ -65,6 +66,9 @@
     gap: 28px;
     flex: 1;
     margin-left: 12px;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .hstat {
@@ -478,20 +482,36 @@
     }
 
     header {
-      padding: 0 12px;
-      gap: 10px;
-      overflow-x: auto;
-      scrollbar-width: none;
+      padding: 0 10px;
+      gap: 8px;
     }
-    header::-webkit-scrollbar { display: none; }
 
-    .header-stats { gap: 16px; flex-shrink: 0; }
-    .hstat-val { font-size: 16px; }
-    .clock { font-size: 15px; }
+    .logo {
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+
+    .header-stats {
+      gap: 12px;
+      margin-left: 6px;
+    }
+
+    /* Hide less critical stats on small screens */
+    .hstat:nth-child(3),
+    .hstat:nth-child(4) { display: none; }
+
+    .hstat-val { font-size: 15px; }
+    .hstat-label { font-size: 8px; }
+
+    .clock { font-size: 14px; letter-spacing: 1px; }
     .location-label { display: none; }
 
-    .search-bar { margin-left: 8px; }
-    .search-bar input { width: 100px; font-size: 12px; }
+    .search-bar {
+      margin-left: 4px;
+      padding: 3px 7px;
+    }
+    .search-bar input { width: 80px; font-size: 11px; }
+    .search-btn { font-size: 10px; padding: 2px 6px; }
 
     .map-area {
       grid-column: 1;
@@ -507,7 +527,6 @@
       overflow: hidden;
     }
 
-    /* On mobile: flight list and detail card sit side by side */
     .flight-list {
       flex: 1;
       overflow-y: auto;
@@ -517,11 +536,10 @@
     }
 
     .detail-card {
-      width: 200px;
+      width: 195px;
       flex-shrink: 0;
       border-top: none;
       overflow-y: auto;
-      font-size: 11px;
       padding: 10px 12px;
     }
 
@@ -532,8 +550,8 @@
     footer {
       grid-column: 1;
       grid-row: 4;
-      padding: 0 12px;
-      gap: 12px;
+      padding: 0 10px;
+      gap: 10px;
       font-size: 9px;
       overflow-x: auto;
       white-space: nowrap;
@@ -541,7 +559,6 @@
     }
     footer::-webkit-scrollbar { display: none; }
 
-    /* Bigger tap targets on mobile */
     .flight-item { padding: 12px 14px; }
     .radius-btn { padding: 2px 7px; font-size: 13px; }
   }
@@ -939,10 +956,11 @@ function setLoadText(t) {
   if (el) el.textContent = t;
 }
 
-// ── OPENSKY API ──
-// When running in a browser (preview / claude.ai), OpenSky blocks the request
-// due to CORS. We try a CORS proxy first, then fall back to demo data so the
-// UI is always usable. On the Raspberry Pi, Chromium fetches directly — no proxy needed.
+// ── FLIGHT DATA SOURCES ──
+// Priority: 1) ADS-B Exchange (good CORS, great coverage)
+//           2) OpenSky direct (works on Pi)
+//           3) OpenSky via CORS proxy
+//           4) Demo data fallback
 
 const OPENSKY_DIRECT = (lat, lon, margin) =>
   `https://opensky-network.org/api/states/all?lamin=${(lat-margin).toFixed(4)}&lomin=${(lon-margin).toFixed(4)}&lamax=${(lat+margin).toFixed(4)}&lomax=${(lon+margin).toFixed(4)}`;
@@ -957,37 +975,71 @@ async function fetchFromProxy(targetUrl, proxyFn) {
   const resp = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
   if (!resp.ok) throw new Error(resp.status);
   const wrapper = await resp.json();
-  // allorigins wraps in { contents: "..." }, corsproxy returns the data directly
   const data = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
   return data;
 }
 
 async function fetchFlights() {
   const margin = Math.max(2.5, RADIUS_KM() / 111);
-  const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
 
-  // 1. Try direct (works on Pi / non-CORS environments)
+  // 1. ADS-B Exchange — best CORS support, real data, no key needed for basic use
   try {
+    const url = `https://api.adsb.lol/v2/lat/${myLat.toFixed(4)}/lon/${myLon.toFixed(4)}/dist/${Math.ceil(RADAR_RADIUS_NM)}`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.ac && data.ac.length >= 0) {
+        setSourceStatus('ok', 'ADS-B Exchange');
+        return parseAdsbLol(data.ac);
+      }
+    }
+  } catch(_) {}
+
+  // 2. OpenSky direct (works on Pi without CORS issues)
+  try {
+    const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
     const resp = await fetch(targetUrl, { signal: AbortSignal.timeout(8000) });
     if (resp.ok) {
       const data = await resp.json();
       setSourceStatus('ok', 'OpenSky Network');
-      return parseFlights(data.states || []);
+      return parseFlightsOpenSky(data.states || []);
     }
   } catch(_) {}
 
-  // 2. Try each CORS proxy in sequence
+  // 3. OpenSky via CORS proxy
   for (const proxyFn of CORS_PROXIES) {
     try {
+      const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
       const data = await fetchFromProxy(targetUrl, proxyFn);
       setSourceStatus('ok', 'OpenSky (proxy)');
-      return parseFlights(data.states || []);
+      return parseFlightsOpenSky(data.states || []);
     } catch(_) {}
   }
 
-  // 3. All failed — show demo data so the UI is still usable
-  setSourceStatus('warn', 'Demo mode (CORS blocked)');
+  // 4. Demo fallback
+  setSourceStatus('warn', 'Demo mode (offline)');
   return generateDemoFlights();
+}
+
+function parseAdsbLol(ac) {
+  return ac
+    .filter(a => a.lat != null && a.lon != null && !a.gnd)
+    .map(a => ({
+      icao24: (a.hex || '').toLowerCase(),
+      callsign: (a.flight || a.hex || '').trim(),
+      country: a.cou || '—',
+      lon: a.lon,
+      lat: a.lat,
+      baro_alt: a.alt_baro && a.alt_baro !== 'ground' ? Math.round(Number(a.alt_baro)) : null,
+      on_ground: !!a.gnd,
+      velocity: a.gs ? Math.round(a.gs) : null,           // ground speed in knots
+      true_track: a.track || 0,
+      vert_rate: a.baro_rate ? Math.round(a.baro_rate).toString() : null,
+      squawk: a.squawk || '—',
+      dist_km: haversine(myLat, myLon, a.lat, a.lon),
+    }))
+    .filter(f => f.dist_km <= RADIUS_KM())
+    .sort((a, b) => a.dist_km - b.dist_km);
 }
 
 function setSourceStatus(level, text) {
@@ -1032,7 +1084,7 @@ function generateDemoFlights() {
   }).filter(f => f.dist_km <= RADIUS_KM()).sort((a,b) => a.dist_km - b.dist_km);
 }
 
-function parseFlights(states) {
+function parseFlightsOpenSky(states) {
   return states
     .filter(s => s[5] !== null && s[6] !== null)
     .map(s => ({
