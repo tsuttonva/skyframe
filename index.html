@@ -669,7 +669,7 @@
 </div>
 
 <header>
-  <div class="logo">◈ SKY<span>FRAME</span></div>
+  <div class="logo">◈ SKY<span>FRAME</span> <span id="ver-label" style="font-size:9px;letter-spacing:1px;color:var(--text-muted);margin-left:2px;"></span></div>
   <div class="header-stats">
     <div class="hstat">
       <div class="hstat-val" id="stat-count">—</div>
@@ -814,6 +814,8 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
+const VERSION = 'v0.5';
+
 const CONFIG = {
   lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
   lon:  -97.0668,          // Longitude — replace with your actual coords (right-click Google Maps → "What's here?")
@@ -841,12 +843,12 @@ function RADIUS_KM() { return RADAR_RADIUS_NM * 1.852; }
 
 const REFRESH_MS = 30000;
 
-// Safari-compatible fetch with timeout (AbortSignal.timeout fails on Safari/WebKit)
+// Timeout via Promise.race — no AbortController, works in all Safari versions
 function fetchWithTimeout(url, options = {}, ms = 8000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { ...options, signal: controller.signal })
-    .finally(() => clearTimeout(timer));
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('timeout')), ms)
+  );
+  return Promise.race([fetch(url, options), timeout]);
 }
 
 
@@ -928,7 +930,12 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
+// Set version display
+document.getElementById('ver-label').textContent = VERSION;
+
 // ── GEO — tries browser geolocation first, falls back to CONFIG coords ──
+// CONFIG.lat/lon are used as fallback (Pi with no GPS, or user denies location)
+// CONFIG.label is only shown when falling back to CONFIG coords
 function getLocation() {
   setLoadText('ACQUIRING LOCATION...');
   if (navigator.geolocation) {
@@ -936,10 +943,16 @@ function getLocation() {
       pos => {
         myLat = pos.coords.latitude;
         myLon = pos.coords.longitude;
+        // Show coords immediately, then replace with city/state
+        document.getElementById('loc-label').textContent =
+          `${myLat.toFixed(2)}°N  ${Math.abs(myLon).toFixed(2)}°W`;
         reverseGeocode(myLat, myLon);
         init();
       },
-      () => useConfigLocation(),
+      (err) => {
+        console.warn('Geolocation failed:', err.message);
+        useConfigLocation();
+      },
       { timeout: 8000, enableHighAccuracy: true }
     );
   } else {
@@ -1005,22 +1018,43 @@ async function fetchFromProxy(targetUrl, proxyFn) {
 
 async function fetchFlights() {
   const margin = Math.max(2.5, RADIUS_KM() / 111);
+  const dist = Math.ceil(RADAR_RADIUS_NM);
+  const lat = myLat.toFixed(4);
+  const lon = myLon.toFixed(4);
 
-  // 1. ADS-B Exchange (adsb.lol) — CORS-friendly, real data
+  // ── Source 1: adsb.lol (primary, CORS-enabled, no key needed) ──
   try {
-    const url = `https://api.adsb.lol/v2/lat/${myLat.toFixed(4)}/lon/${myLon.toFixed(4)}/dist/${Math.ceil(RADAR_RADIUS_NM)}`;
+    const url = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`;
     const resp = await fetchWithTimeout(url, {}, 10000);
     if (resp.ok) {
       const data = await resp.json();
       if (data && Array.isArray(data.ac)) {
         const parsed = parseAdsbLol(data.ac);
-        setSourceStatus('ok', `ADS-B Exchange (${parsed.length})`);
+        setSourceStatus('ok', `ADS-B Exchange · ${parsed.length} ac`);
         return parsed;
       }
+    } else {
+      console.warn('adsb.lol HTTP', resp.status);
     }
   } catch(e) { console.warn('adsb.lol failed:', e.message); }
 
-  // 2. OpenSky direct (works on Pi)
+  // ── Source 2: adsb.one (alternate ADS-B, CORS-enabled) ──
+  try {
+    const url = `https://api.adsb.one/v2/point/${lat}/${lon}/${dist}`;
+    const resp = await fetchWithTimeout(url, {}, 10000);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && Array.isArray(data.ac)) {
+        const parsed = parseAdsbLol(data.ac); // same schema
+        setSourceStatus('ok', `adsb.one · ${parsed.length} ac`);
+        return parsed;
+      }
+    } else {
+      console.warn('adsb.one HTTP', resp.status);
+    }
+  } catch(e) { console.warn('adsb.one failed:', e.message); }
+
+  // ── Source 3: OpenSky direct (works on Pi, blocked in browser by CORS) ──
   try {
     const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
     const resp = await fetchWithTimeout(targetUrl, {}, 8000);
@@ -1028,10 +1062,12 @@ async function fetchFlights() {
       const data = await resp.json();
       setSourceStatus('ok', 'OpenSky Network');
       return parseFlightsOpenSky(data.states || []);
+    } else {
+      console.warn('OpenSky HTTP', resp.status);
     }
   } catch(e) { console.warn('OpenSky direct failed:', e.message); }
 
-  // 3. OpenSky via CORS proxy
+  // ── Source 4: OpenSky via CORS proxies ──
   for (const proxyFn of CORS_PROXIES) {
     try {
       const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
@@ -1041,8 +1077,8 @@ async function fetchFlights() {
     } catch(e) { console.warn('proxy failed:', e.message); }
   }
 
-  // 4. Demo fallback
-  setSourceStatus('warn', 'Demo mode (offline)');
+  // ── Fallback: demo data ──
+  setSourceStatus('warn', 'Demo mode (no data source reachable)');
   return generateDemoFlights();
 }
 
