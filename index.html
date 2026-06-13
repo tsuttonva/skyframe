@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyFrame — Local Flight Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --radar-green: #00ff88;
+    --radar-dim: #00994d;
+    --radar-ghost: #003322;
+    --sky-dark: #060d14;
+    --sky-mid: #0a1628;
+    --sky-panel: #0d1e35;
+    --sky-border: #1a3a5c;
+    --amber: #ffb830;
+    --amber-dim: #7a5200;
+    --text-main: #cce8ff;
+    --text-dim: #4a7a9b;
+    --text-muted: #2a4a6b;
+    --highlight: #00ccff;
+    --danger: #ff4466;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--sky-dark);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 56px 1fr 44px;
+    grid-template-columns: 1fr 320px;
+    gap: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    grid-column: 1 / -1;
+    background: var(--sky-panel);
+    border-bottom: 1px solid var(--sky-border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 24px;
+  }
+
+  .logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    color: var(--radar-green);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  .logo span { color: var(--text-dim); }
+
+  .header-stats {
+    display: flex;
+    gap: 28px;
+    flex: 1;
+    margin-left: 12px;
+  }
+
+  .hstat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .hstat-val {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 20px;
+    color: var(--radar-green);
+    line-height: 1;
+  }
+
+  .hstat-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .clock {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 22px;
+    color: var(--amber);
+    letter-spacing: 2px;
+    margin-left: auto;
+  }
+
+  .location-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--radar-green);
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 5px rgba(0,255,136,0); }
+  }
+
+  /* ── SEARCH BAR ── */
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--sky-dark);
+    border: 1px solid var(--sky-border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-left: 16px;
+  }
+
+  .search-bar input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-main);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    width: 140px;
+    text-transform: uppercase;
+  }
+
+  .search-bar input::placeholder { color: var(--text-muted); text-transform: none; }
+
+  .search-btn {
+    background: var(--radar-ghost);
+    border: 1px solid var(--radar-dim);
+    border-radius: 3px;
+    color: var(--radar-green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+
+  .search-btn:hover { background: var(--radar-dim); color: var(--sky-dark); }
+
+  .clear-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+  }
+
+  .clear-btn:hover { color: var(--danger); }
+
+  /* ── RADAR MAP ── */
+  .map-area {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #091520 0%, var(--sky-dark) 75%);
+  }
+
+  canvas#radar {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+
+  .radius-label {
+    position: absolute;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .sweep-overlay {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform-origin: 0 0;
+    pointer-events: none;
+    animation: sweep 6s linear infinite;
+    border-top: 1px solid transparent;
+  }
+
+  @keyframes sweep {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  /* Selected flight tooltip on map */
+  .map-tooltip {
+    position: absolute;
+    background: rgba(6,13,20,0.92);
+    border: 1px solid var(--highlight);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--highlight);
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+    min-width: 140px;
+    box-shadow: 0 0 12px rgba(0,204,255,0.2);
+  }
+
+  .map-tooltip.visible { display: block; }
+  .map-tooltip .tip-callsign { font-size: 14px; color: #fff; margin-bottom: 4px; }
+  .map-tooltip .tip-row { display: flex; justify-content: space-between; gap: 16px; color: var(--text-dim); font-size: 10px; }
+  .map-tooltip .tip-row span:last-child { color: var(--text-main); }
+
+  /* ── SIDE PANEL ── */
+  .side-panel {
+    background: var(--sky-panel);
+    border-left: 1px solid var(--sky-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--sky-border);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .panel-header .count {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    color: var(--radar-green);
+  }
+
+  .flight-list {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sky-border) transparent;
+  }
+
+  .flight-list::-webkit-scrollbar { width: 4px; }
+  .flight-list::-webkit-scrollbar-track { background: transparent; }
+  .flight-list::-webkit-scrollbar-thumb { background: var(--sky-border); border-radius: 2px; }
+
+  .flight-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--text-muted);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+
+  .flight-item:hover { background: rgba(0,255,136,0.04); }
+  .flight-item.active {
+    background: rgba(0,204,255,0.07);
+    border-left: 2px solid var(--highlight);
+  }
+
+  .flight-item.tracked {
+    background: rgba(255,184,48,0.06);
+    border-left: 2px solid var(--amber);
+  }
+
+  .fi-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+
+  .fi-callsign {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    color: #fff;
+    font-weight: bold;
+  }
+
+  .fi-callsign.tracked { color: var(--amber); }
+
+  .fi-dist {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .fi-mid {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+  }
+
+  .fi-val {
+    color: var(--text-main);
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .fi-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .alt-bar {
+    flex: 1;
+    height: 2px;
+    background: var(--text-muted);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .alt-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--radar-dim), var(--radar-green));
+    border-radius: 1px;
+    transition: width 1s ease;
+  }
+
+  /* ── DETAIL CARD (bottom of side panel) ── */
+  .detail-card {
+    border-top: 1px solid var(--sky-border);
+    padding: 14px 16px;
+    flex-shrink: 0;
+    display: none;
+  }
+
+  .detail-card.visible { display: block; }
+
+  .dc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .dc-callsign {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 20px;
+    color: var(--highlight);
+  }
+
+  .dc-track-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 1px solid var(--amber-dim);
+    background: transparent;
+    color: var(--amber);
+    transition: all 0.15s;
+    letter-spacing: 1px;
+  }
+
+  .dc-track-btn:hover { background: var(--amber); color: var(--sky-dark); }
+  .dc-track-btn.tracking { background: var(--amber); color: var(--sky-dark); border-color: var(--amber); }
+
+  .dc-close-btn {
+    background: none;
+    border: 1px solid var(--text-muted);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-size: 13px;
+    width: 26px; height: 26px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .dc-close-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+  .dc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dc-field { display: flex; flex-direction: column; gap: 2px; }
+  .dc-label { font-size: 9px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; }
+  .dc-value { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: var(--text-main); }
+  .dc-value.big { font-size: 16px; color: #fff; }
+
+  /* ── STATUS BAR ── */
+  footer {
+    grid-column: 1 / -1;
+    background: var(--sky-panel);
+    border-top: 1px solid var(--sky-border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 20px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .status-item { display: flex; align-items: center; gap: 6px; }
+  .status-ok { color: var(--radar-green); }
+  .status-warn { color: var(--amber); }
+  .status-err { color: var(--danger); }
+
+  .tracked-banner {
+    margin-left: auto;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--amber);
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tracked-banner.visible { display: flex; }
+  .tracked-banner .blink { animation: blink 1s step-end infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── LOADING OVERLAY ── */
+  #loading {
+    position: fixed;
+    inset: 0;
+    background: var(--sky-dark);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 16px;
+  }
+
+  .load-logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 28px;
+    color: var(--radar-green);
+    letter-spacing: 6px;
+  }
+
+  .load-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ── MOBILE / RESPONSIVE ── */
+  @media (max-width: 700px) {
+    body {
+      grid-template-rows: 48px 1fr 280px 40px;
+      grid-template-columns: 1fr;
+      height: 100dvh;
+    }
+
+    header {
+      padding: 0 12px;
+      gap: 10px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    header::-webkit-scrollbar { display: none; }
+
+    .header-stats { gap: 16px; flex-shrink: 0; }
+    .hstat-val { font-size: 16px; }
+    .clock { font-size: 15px; }
+    .location-label { display: none; }
+
+    .search-bar { margin-left: 8px; }
+    .search-bar input { width: 100px; font-size: 12px; }
+
+    .map-area {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .side-panel {
+      grid-column: 1;
+      grid-row: 3;
+      border-left: none;
+      border-top: 1px solid var(--sky-border);
+      flex-direction: row;
+      overflow: hidden;
+    }
+
+    /* On mobile: flight list and detail card sit side by side */
+    .flight-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 0;
+      border-right: 1px solid var(--sky-border);
+    }
+
+    .detail-card {
+      width: 200px;
+      flex-shrink: 0;
+      border-top: none;
+      overflow-y: auto;
+      font-size: 11px;
+      padding: 10px 12px;
+    }
+
+    .dc-callsign { font-size: 16px; }
+    .dc-value.big { font-size: 13px; }
+    .dc-apt-code { font-size: 14px; }
+
+    footer {
+      grid-column: 1;
+      grid-row: 4;
+      padding: 0 12px;
+      gap: 12px;
+      font-size: 9px;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+    footer::-webkit-scrollbar { display: none; }
+
+    /* Bigger tap targets on mobile */
+    .flight-item { padding: 12px 14px; }
+    .radius-btn { padding: 2px 7px; font-size: 13px; }
+  }
+
+
+
+  /* ── ROUTE DISPLAY ── */
+  .dc-route {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--sky-border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+
+  .dc-airport { flex: 1; min-width: 0; }
+  .dc-airport-right { text-align: right; }
+
+  .dc-apt-code {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    color: var(--highlight);
+    line-height: 1.1;
+  }
+
+  .dc-apt-name {
+    font-size: 9px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+    max-width: 110px;
+  }
+
+  .dc-airport-right .dc-apt-name { margin-left: auto; }
+
+  .dc-route-arrow {
+    font-size: 16px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    animation: flythrough 3s ease-in-out infinite;
+  }
+
+  @keyframes flythrough {
+    0%,100% { transform: translateX(0); opacity: 0.5; }
+    50%      { transform: translateX(3px); opacity: 1; }
+  }
+
+  .dc-aircraft-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+
+  .dc-aircraft-val {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--amber);
+  }
+
+  .dc-loading {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ── RADIUS CONTROLS ── */
+  .radius-btn {
+    background: none;
+    border: 1px solid var(--text-muted);
+    border-radius: 2px;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    padding: 0 4px;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: all 0.15s;
+  }
+  .radius-btn:hover { border-color: var(--radar-green); color: var(--radar-green); }
+
+  /* ── CHIME TOGGLE ── */
+  .chime-toggle {
+    background: none;
+    border: 1px solid var(--amber-dim);
+    border-radius: 3px;
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+  }
+  .chime-toggle:hover { background: rgba(255,184,48,0.1); }
+  .chime-toggle.muted { border-color: var(--text-muted); color: var(--text-muted); }
+
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="load-logo">◈ SKYFRAME</div>
+  <div class="load-text">ACQUIRING LOCATION...</div>
+</div>
+
+<header>
+  <div class="logo">◈ SKY<span>FRAME</span></div>
+  <div class="header-stats">
+    <div class="hstat">
+      <div class="hstat-val" id="stat-count">—</div>
+      <div class="hstat-label">Overhead</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val" id="stat-highest">—</div>
+      <div class="hstat-label">Highest ft</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val" id="stat-fastest">—</div>
+      <div class="hstat-label">Fastest kts</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val" id="stat-radius">150</div>
+      <div class="hstat-label">
+        <button class="radius-btn" onclick="adjustRadius(-25)" title="Shrink radius">−</button>
+        Radius nm
+        <button class="radius-btn" onclick="adjustRadius(25)" title="Expand radius">+</button>
+      </div>
+    </div>
+  </div>
+  <div class="location-label">
+    <div class="dot"></div>
+    <span id="loc-label">Acquiring GPS…</span>
+  </div>
+  <div class="search-bar">
+    <input type="text" id="search-input" placeholder="Flight / tail (e.g. UAL123)" maxlength="10">
+    <button class="search-btn" onclick="doSearch()">TRACK</button>
+    <button class="clear-btn" onclick="clearTrack()" title="Clear tracking">✕</button>
+  </div>
+  <div class="clock" id="clock">--:--:--</div>
+</header>
+
+<main class="map-area">
+  <canvas id="radar"></canvas>
+  <div class="map-tooltip" id="map-tooltip">
+    <div class="tip-callsign" id="tt-callsign"></div>
+    <div class="tip-row"><span>ALT</span><span id="tt-alt"></span></div>
+    <div class="tip-row"><span>SPD</span><span id="tt-spd"></span></div>
+    <div class="tip-row"><span>HDG</span><span id="tt-hdg"></span></div>
+    <div class="tip-row"><span>DIST</span><span id="tt-dist"></span></div>
+  </div>
+</main>
+
+<aside class="side-panel">
+  <div class="panel-header">
+    <span>Nearby Flights</span>
+    <span class="count" id="panel-count">0</span>
+  </div>
+  <div class="flight-list" id="flight-list"></div>
+  <div class="detail-card" id="detail-card">
+    <div class="dc-header">
+      <div class="dc-callsign" id="dc-callsign">—</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="dc-track-btn" id="dc-track-btn" onclick="toggleTrack()">⊕ TRACK</button>
+        <button class="dc-close-btn" onclick="closeFlight()" title="Close">✕</button>
+      </div>
+    </div>
+    <!-- Route row -->
+    <div class="dc-route" id="dc-route">
+      <div class="dc-airport">
+        <div class="dc-label">From</div>
+        <div class="dc-apt-code" id="dc-origin-code">—</div>
+        <div class="dc-apt-name" id="dc-origin-name"></div>
+      </div>
+      <div class="dc-route-arrow" id="dc-route-arrow">✈</div>
+      <div class="dc-airport dc-airport-right">
+        <div class="dc-label">To</div>
+        <div class="dc-apt-code" id="dc-dest-code">—</div>
+        <div class="dc-apt-name" id="dc-dest-name"></div>
+      </div>
+    </div>
+    <!-- Aircraft type -->
+    <div class="dc-aircraft-row" id="dc-aircraft-row">
+      <div class="dc-label">Aircraft</div>
+      <div class="dc-aircraft-val" id="dc-aircraft">—</div>
+    </div>
+    <div class="dc-grid">
+      <div class="dc-field">
+        <div class="dc-label">Altitude</div>
+        <div class="dc-value big" id="dc-alt">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Speed</div>
+        <div class="dc-value big" id="dc-speed">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Heading</div>
+        <div class="dc-value" id="dc-heading">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Distance</div>
+        <div class="dc-value" id="dc-dist">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Vert. Rate</div>
+        <div class="dc-value" id="dc-vrate">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Squawk</div>
+        <div class="dc-value" id="dc-squawk">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Reg / ICAO</div>
+        <div class="dc-value" id="dc-icao">—</div>
+      </div>
+      <div class="dc-field">
+        <div class="dc-label">Country</div>
+        <div class="dc-value" id="dc-country">—</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<footer>
+  <div class="status-item">
+    <span>SOURCE</span>
+    <span class="status-ok" id="status-source">OpenSky Network</span>
+  </div>
+  <div class="status-item">
+    <span>LAST UPDATE</span>
+    <span id="status-update">—</span>
+  </div>
+  <div class="status-item">
+    <span>REFRESH</span>
+    <span>30s</span>
+  </div>
+  <div class="status-item">
+    <button class="chime-toggle" id="chime-toggle" onclick="toggleChime()" title="Toggle proximity chime">
+      🔔 CHIME <span id="chime-state">ON</span>
+    </button>
+    <span id="chime-radius-label" style="font-size:9px;color:var(--amber);margin-left:4px;">▶ &lt;15nm</span>
+  </div>
+  <div class="tracked-banner" id="tracked-banner">
+    <span class="blink">▶</span>
+    <span>TRACKING: <span id="tracked-id">—</span></span>
+  </div>
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  SKYFRAME CONFIG — edit these values for your location
+// ══════════════════════════════════════════════════════════════
+const CONFIG = {
+  lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
+  lon:  -97.0668,          // Longitude — replace with your actual coords (right-click Google Maps → "What's here?")
+  label: 'UND Memorial Union',  // Shown in the header
+  radarRadiusNm:   150,    // Outer radar radius (nm) — adjustable in the UI
+  chimeRadiusNm:    15,    // Inner "go look outside" ring (nm) — triggers chime + voice
+  chimeEnabled:    true,   // Set false to silence all audio
+  voiceEnabled:    true,   // Spoken callsign announcements ("Delta 18-87, 8 miles")
+  chimeVolume:     0.6,    // 0.0 – 1.0
+};
+// ══════════════════════════════════════════════════════════════
+
+// ── STATE ──
+let myLat = CONFIG.lat;
+let myLon = CONFIG.lon;
+let flights = [];
+let selectedFlight = null;
+let trackedCallsign = null;
+let trackedFromSearch = false;
+let animFrame = null;
+
+let RADAR_RADIUS_NM = CONFIG.radarRadiusNm;
+let CHIME_RADIUS_NM = CONFIG.chimeRadiusNm;
+function RADIUS_KM() { return RADAR_RADIUS_NM * 1.852; }
+
+const REFRESH_MS = 30000;
+
+// ── CHIME / VOICE ENGINE ──
+const chimeLog = new Set(); // icao24s that have already triggered a chime this session
+
+function nmFromKm(km) { return km / 1.852; }
+
+function checkChimes(newFlights) {
+  if (!CONFIG.chimeEnabled) return;
+  newFlights.forEach(f => {
+    const nm = nmFromKm(f.dist_km);
+    if (nm <= CHIME_RADIUS_NM && !chimeLog.has(f.icao24)) {
+      chimeLog.add(f.icao24);
+      playChime();
+      if (CONFIG.voiceEnabled) speakFlight(f, nm);
+    }
+  });
+  // Remove from log if they've moved beyond 1.2× chime radius (re-arm on re-entry)
+  chimeLog.forEach(icao => {
+    const f = flights.find(x => x.icao24 === icao);
+    if (!f || nmFromKm(f.dist_km) > CHIME_RADIUS_NM * 1.2) chimeLog.delete(icao);
+  });
+}
+
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const vol = ctx.createGain();
+    vol.gain.setValueAtTime(CONFIG.chimeVolume * 0.4, ctx.currentTime);
+    vol.connect(ctx.destination);
+    // Double beep — ATC-style
+    [[880, 0, 0.12], [1100, 0.18, 0.1]].forEach(([freq, delay, dur]) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, ctx.currentTime + delay);
+      g.gain.linearRampToValueAtTime(CONFIG.chimeVolume, ctx.currentTime + delay + 0.01);
+      g.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + dur);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + dur + 0.05);
+    });
+  } catch(e) {}
+}
+
+function speakFlight(f, nm) {
+  if (!window.speechSynthesis) return;
+  // Format callsign for natural speech: "DAL1887" → "Delta 1887"
+  const airlines = {
+    'UAL':'United','DAL':'Delta','AAL':'American','SWA':'Southwest',
+    'SKW':'SkyWest','FFT':'Frontier','JBU':'JetBlue','ASA':'Alaska',
+    'EJA':'NetJets','WJA':'WestJet','FDX':'FedEx','UPS':'UPS',
+    'RPA':'Republic','ENY':'Envoy','PDT':'Piedmont','CPZ':'Compass',
+  };
+  const cs = f.callsign.trim();
+  const prefix = cs.slice(0, 3).toUpperCase();
+  const nums = cs.slice(3);
+  const airline = airlines[prefix] || prefix;
+  const numSpoken = nums.split('').join(' '); // "1887" → "1 8 8 7" for clarity
+  const nmRounded = Math.round(nm);
+  const alt = f.baro_alt ? `, ${Math.round(f.baro_alt/100)*100} feet` : '';
+  const utterance = new SpeechSynthesisUtterance(
+    `${airline} ${numSpoken}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`
+  );
+  utterance.rate = 0.92;
+  utterance.pitch = 1.0;
+  window.speechSynthesis.speak(utterance);
+}
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toUTCString().slice(17,25) + ' Z';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── GEO — tries browser geolocation first, falls back to CONFIG coords ──
+function getLocation() {
+  setLoadText('ACQUIRING LOCATION...');
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        myLat = pos.coords.latitude;
+        myLon = pos.coords.longitude;
+        const latStr = (myLat >= 0 ? myLat.toFixed(3)+'°N' : Math.abs(myLat).toFixed(3)+'°S');
+        const lonStr = (myLon >= 0 ? myLon.toFixed(3)+'°E' : Math.abs(myLon).toFixed(3)+'°W');
+        document.getElementById('loc-label').textContent = `${latStr}  ${lonStr}`;
+        init();
+      },
+      () => useConfigLocation(),
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  } else {
+    useConfigLocation();
+  }
+}
+
+function useConfigLocation() {
+  myLat = CONFIG.lat;
+  myLon = CONFIG.lon;
+  document.getElementById('loc-label').textContent = CONFIG.label;
+  init();
+}
+
+function setLoadText(t) {
+  const el = document.querySelector('.load-text');
+  if (el) el.textContent = t;
+}
+
+// ── OPENSKY API ──
+// When running in a browser (preview / claude.ai), OpenSky blocks the request
+// due to CORS. We try a CORS proxy first, then fall back to demo data so the
+// UI is always usable. On the Raspberry Pi, Chromium fetches directly — no proxy needed.
+
+const OPENSKY_DIRECT = (lat, lon, margin) =>
+  `https://opensky-network.org/api/states/all?lamin=${(lat-margin).toFixed(4)}&lomin=${(lon-margin).toFixed(4)}&lamax=${(lat+margin).toFixed(4)}&lomax=${(lon+margin).toFixed(4)}`;
+
+const CORS_PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+];
+
+async function fetchFromProxy(targetUrl, proxyFn) {
+  const proxied = proxyFn(targetUrl);
+  const resp = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
+  if (!resp.ok) throw new Error(resp.status);
+  const wrapper = await resp.json();
+  // allorigins wraps in { contents: "..." }, corsproxy returns the data directly
+  const data = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
+  return data;
+}
+
+async function fetchFlights() {
+  const margin = Math.max(2.5, RADIUS_KM() / 111);
+  const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
+
+  // 1. Try direct (works on Pi / non-CORS environments)
+  try {
+    const resp = await fetch(targetUrl, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      setSourceStatus('ok', 'OpenSky Network');
+      return parseFlights(data.states || []);
+    }
+  } catch(_) {}
+
+  // 2. Try each CORS proxy in sequence
+  for (const proxyFn of CORS_PROXIES) {
+    try {
+      const data = await fetchFromProxy(targetUrl, proxyFn);
+      setSourceStatus('ok', 'OpenSky (proxy)');
+      return parseFlights(data.states || []);
+    } catch(_) {}
+  }
+
+  // 3. All failed — show demo data so the UI is still usable
+  setSourceStatus('warn', 'Demo mode (CORS blocked)');
+  return generateDemoFlights();
+}
+
+function setSourceStatus(level, text) {
+  const el = document.getElementById('status-source');
+  el.className = level === 'ok' ? 'status-ok' : level === 'warn' ? 'status-warn' : 'status-err';
+  el.textContent = text;
+}
+
+function generateDemoFlights() {
+  // Realistic-looking flights scattered around myLat/myLon
+  const templates = [
+    { cs:'UAL2341', country:'United States', alt:35000, spd:465, hdg:275, vr:0 },
+    { cs:'DAL1887', country:'United States', alt:38000, spd:488, hdg:92,  vr:0 },
+    { cs:'AAL504',  country:'United States', alt:22000, spd:380, hdg:183, vr:-800 },
+    { cs:'SWA3301', country:'United States', alt:31000, spd:440, hdg:315, vr:0 },
+    { cs:'SKW5522', country:'United States', alt:18000, spd:320, hdg:55,  vr:1200 },
+    { cs:'FFT211',  country:'United States', alt:41000, spd:510, hdg:260, vr:0 },
+    { cs:'JBU1044', country:'United States', alt:36000, spd:472, hdg:130, vr:0 },
+    { cs:'ASA887',  country:'United States', alt:28000, spd:410, hdg:345, vr:-400 },
+    { cs:'N7834K',  country:'United States', alt:8500,  spd:142, hdg:220, vr:0 },
+    { cs:'EJA552',  country:'United States', alt:43000, spd:495, hdg:80,  vr:0 },
+  ];
+  return templates.map((t, i) => {
+    const angle = (i / templates.length) * Math.PI * 2 + Math.random() * 0.4;
+    const dist  = 0.3 + Math.random() * 0.6; // fraction of radius
+    const latOff = Math.sin(angle) * dist * 2.2;
+    const lonOff = Math.cos(angle) * dist * 2.5;
+    return {
+      icao24: 'a' + Math.floor(Math.random()*0xfffff).toString(16).padStart(5,'0'),
+      callsign: t.cs,
+      country: t.country,
+      lat: myLat + latOff,
+      lon: myLon + lonOff,
+      baro_alt: t.alt + Math.round((Math.random()-0.5)*1000),
+      on_ground: false,
+      velocity: t.spd + Math.round((Math.random()-0.5)*20),
+      true_track: (t.hdg + Math.round((Math.random()-0.5)*10) + 360) % 360,
+      vert_rate: (t.vr + Math.round((Math.random()-0.5)*100)).toFixed(0),
+      squawk: (1000 + Math.floor(Math.random()*6000)).toString(),
+      dist_km: haversine(myLat, myLon, myLat+latOff, myLon+lonOff),
+    };
+  }).filter(f => f.dist_km <= RADIUS_KM()).sort((a,b) => a.dist_km - b.dist_km);
+}
+
+function parseFlights(states) {
+  return states
+    .filter(s => s[5] !== null && s[6] !== null)
+    .map(s => ({
+      icao24: s[0],
+      callsign: (s[1] || '').trim() || s[0].toUpperCase(),
+      country: s[2] || '—',
+      lon: s[5],
+      lat: s[6],
+      baro_alt: s[7] ? Math.round(s[7] * 3.28084) : null,
+      on_ground: s[8],
+      velocity: s[9] ? Math.round(s[9] * 1.94384) : null, // m/s → knots
+      true_track: s[10] || 0,
+      vert_rate: s[11] ? (s[11] * 196.85).toFixed(0) : null, // m/s → fpm
+      squawk: s[14] || '—',
+      dist_km: haversine(myLat, myLon, s[6], s[5])
+    }))
+    .filter(f => f.dist_km <= RADIUS_KM() && !f.on_ground)
+    .sort((a,b) => a.dist_km - b.dist_km);
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function kmToNm(km) { return (km * 0.539957).toFixed(1); }
+
+// ── INIT ──
+async function init() {
+  setLoadText('CONNECTING TO OPENSKY...');
+  flights = await fetchFlights();
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('status-update').textContent =
+    new Date().toISOString().slice(11,19) + ' Z';
+  updateRadiusStat();
+  render();
+  startRadar();
+  setInterval(refresh, REFRESH_MS);
+}
+
+async function refresh() {
+  const newFlights = await fetchFlights();
+  checkChimes(newFlights);
+  flights = newFlights;
+  document.getElementById('status-update').textContent =
+    new Date().toISOString().slice(11,19) + ' Z';
+  if (trackedCallsign) {
+    const found = flights.find(f =>
+      f.callsign.toUpperCase() === trackedCallsign.toUpperCase() ||
+      f.icao24.toUpperCase() === trackedCallsign.toUpperCase()
+    );
+    if (found) selectFlight(found);
+  }
+  render();
+}
+
+function updateRadiusStat() {
+  document.getElementById('stat-radius').textContent = Math.round(RADAR_RADIUS_NM);
+}
+
+// ── RENDER LIST ──
+function render() {
+  updateStats();
+  renderList();
+}
+
+function updateStats() {
+  document.getElementById('stat-count').textContent = flights.length;
+  const alts = flights.map(f => f.baro_alt).filter(Boolean);
+  const spds = flights.map(f => f.velocity).filter(Boolean);
+  document.getElementById('stat-highest').textContent = alts.length ? Math.max(...alts).toLocaleString() : '—';
+  document.getElementById('stat-fastest').textContent = spds.length ? Math.max(...spds) : '—';
+  document.getElementById('panel-count').textContent = flights.length;
+}
+
+function renderList() {
+  const list = document.getElementById('flight-list');
+  list.innerHTML = '';
+  flights.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'flight-item' +
+      (selectedFlight && selectedFlight.icao24 === f.icao24 ? ' active' : '') +
+      (trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign) ? ' tracked' : '');
+    const altPct = f.baro_alt ? Math.min(100, (f.baro_alt / 45000) * 100) : 0;
+    const isTracked = trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign);
+    const vrateStr = f.vert_rate !== null
+      ? (parseInt(f.vert_rate) > 200 ? '▲' : parseInt(f.vert_rate) < -200 ? '▼' : '→')
+      : '→';
+    div.innerHTML = `
+      <div class="fi-top">
+        <div class="fi-callsign ${isTracked ? 'tracked' : ''}">${isTracked ? '▶ ':''} ${f.callsign}</div>
+        <div class="fi-dist">${kmToNm(f.dist_km)} nm</div>
+      </div>
+      <div class="fi-mid">
+        <span>${f.baro_alt ? f.baro_alt.toLocaleString()+' ft' : '—'}</span>
+        <span>${f.velocity ? f.velocity+' kts' : '—'}</span>
+        <span>${f.true_track ? Math.round(f.true_track)+'°' : '—'}</span>
+        <span>${f.country}</span>
+      </div>
+      <div class="fi-bar">
+        <span>FL${f.baro_alt ? String(Math.round(f.baro_alt/100)).padStart(3,'0') : '---'}</span>
+        <div class="alt-bar"><div class="alt-fill" style="width:${altPct}%"></div></div>
+        <span>${vrateStr}</span>
+      </div>`;
+    div.addEventListener('click', () => selectFlight(f));
+    list.appendChild(div);
+  });
+}
+
+// ── ENRICHMENT CACHE ──
+const enrichCache = {}; // icao24 → { route, aircraft }
+
+// ── FLIGHT SELECTION ──
+function selectFlight(f) {
+  selectedFlight = f;
+
+  // Populate known fields immediately
+  document.getElementById('dc-callsign').textContent = f.callsign;
+  document.getElementById('dc-alt').textContent = f.baro_alt ? f.baro_alt.toLocaleString()+' ft' : '—';
+  document.getElementById('dc-speed').textContent = f.velocity ? f.velocity+' kts' : '—';
+  document.getElementById('dc-heading').textContent = f.true_track !== null ? Math.round(f.true_track)+'°' : '—';
+  document.getElementById('dc-dist').textContent = kmToNm(f.dist_km)+' nm';
+  document.getElementById('dc-country').textContent = f.country;
+  document.getElementById('dc-icao').textContent = f.icao24.toUpperCase();
+  document.getElementById('dc-vrate').textContent = f.vert_rate ? parseInt(f.vert_rate).toLocaleString()+' fpm' : '—';
+  document.getElementById('dc-squawk').textContent = f.squawk;
+
+  // Reset route/aircraft to loading state
+  setRouteLoading();
+
+  const isTracked = trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign);
+  const btn = document.getElementById('dc-track-btn');
+  btn.textContent = isTracked ? '■ UNTRACK' : '⊕ TRACK';
+  btn.className = 'dc-track-btn' + (isTracked ? ' tracking' : '');
+  document.getElementById('detail-card').className = 'detail-card visible';
+  renderList();
+
+  // Fetch enrichment (cached)
+  fetchEnrichment(f);
+}
+
+function setRouteLoading() {
+  document.getElementById('dc-origin-code').textContent = '…';
+  document.getElementById('dc-origin-name').textContent = '';
+  document.getElementById('dc-dest-code').textContent = '…';
+  document.getElementById('dc-dest-name').textContent = '';
+  document.getElementById('dc-aircraft').innerHTML = '<span class="dc-loading">FETCHING...</span>';
+}
+
+function applyEnrichment(data) {
+  // Route
+  if (data.origin) {
+    document.getElementById('dc-origin-code').textContent = data.origin.iata || data.origin.icao || '—';
+    document.getElementById('dc-origin-name').textContent = data.origin.name || '';
+  } else {
+    document.getElementById('dc-origin-code').textContent = '—';
+    document.getElementById('dc-origin-name').textContent = 'Unknown';
+  }
+  if (data.dest) {
+    document.getElementById('dc-dest-code').textContent = data.dest.iata || data.dest.icao || '—';
+    document.getElementById('dc-dest-name').textContent = data.dest.name || '';
+  } else {
+    document.getElementById('dc-dest-code').textContent = '—';
+    document.getElementById('dc-dest-name').textContent = 'Unknown';
+  }
+  // Aircraft
+  document.getElementById('dc-aircraft').textContent = data.aircraft || '—';
+  // Registration
+  if (data.registration) {
+    const cur = document.getElementById('dc-icao').textContent;
+    if (!cur.includes('/')) {
+      document.getElementById('dc-icao').textContent = data.registration + ' / ' + cur;
+    }
+  }
+}
+
+async function fetchEnrichment(f) {
+  const key = f.icao24;
+  if (enrichCache[key]) {
+    applyEnrichment(enrichCache[key]);
+    return;
+  }
+
+  const result = { origin: null, dest: null, aircraft: null, registration: null };
+
+  // --- Source 1: adsb.lol /v2/icao/{hex} — gives route + aircraft type ---
+  try {
+    const r = await fetch(`https://api.adsb.lol/v2/icao/${f.icao24}`, { signal: AbortSignal.timeout(6000) });
+    if (r.ok) {
+      const d = await r.json();
+      const ac = d.ac && d.ac[0];
+      if (ac) {
+        // Aircraft type
+        if (ac.t) result.aircraft = ac.t; // ICAO type code e.g. "B738"
+        if (ac.desc) result.aircraft = (result.aircraft ? result.aircraft + ' — ' : '') + ac.desc;
+        if (ac.r) result.registration = ac.r;
+        // Route from flight data
+        if (ac.flight) {
+          const cs = ac.flight.trim();
+          // Try to get route from adsb.lol route endpoint
+          try {
+            const rr = await fetch(`https://api.adsb.lol/api/0/routeset`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ planes: [{ callsign: cs, lat: f.lat, lng: f.lon }] }),
+              signal: AbortSignal.timeout(5000)
+            });
+            if (rr.ok) {
+              const rd = await rr.json();
+              if (rd && rd[0] && rd[0].airport_codes) {
+                const parts = rd[0].airport_codes.split('-');
+                if (parts[0]) result.origin = { iata: parts[0], name: rd[0].originIata || parts[0] };
+                if (parts[1]) result.dest   = { iata: parts[1], name: rd[0].destinationIata || parts[1] };
+              }
+            }
+          } catch(_) {}
+        }
+      }
+    }
+  } catch(_) {}
+
+  // --- Source 2: adsbdb.com — aircraft registration/type fallback ---
+  if (!result.aircraft || !result.registration) {
+    try {
+      const r = await fetch(`https://www.adsbdb.com/api/aircraft/${f.icao24}`, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const d = await r.json();
+        const ac = d.response && d.response.aircraft;
+        if (ac) {
+          if (!result.registration && ac.registration) result.registration = ac.registration;
+          if (!result.aircraft) {
+            const parts = [ac.type, ac.icao_type].filter(Boolean);
+            result.aircraft = parts.join(' / ') || null;
+          }
+        }
+      }
+    } catch(_) {}
+  }
+
+  // --- Demo mode: inject plausible data for demo flights ---
+  if (!result.origin && !result.dest) {
+    const demoRoutes = {
+      'UAL2341': { origin:{iata:'ORD',name:"Chicago O'Hare"}, dest:{iata:'LAX',name:'Los Angeles Intl'} },
+      'DAL1887': { origin:{iata:'ATL',name:'Atlanta Hartsfield'}, dest:{iata:'JFK',name:'New York JFK'} },
+      'AAL504':  { origin:{iata:'DFW',name:'Dallas/Fort Worth'}, dest:{iata:'MIA',name:'Miami Intl'} },
+      'SWA3301': { origin:{iata:'MDW',name:'Chicago Midway'}, dest:{iata:'PHX',name:'Phoenix Sky Harbor'} },
+      'SKW5522': { origin:{iata:'DEN',name:'Denver Intl'}, dest:{iata:'SLC',name:'Salt Lake City'} },
+      'FFT211':  { origin:{iata:'LAS',name:"Las Vegas Harry Reid"}, dest:{iata:'BOS',name:'Boston Logan'} },
+      'JBU1044': { origin:{iata:'JFK',name:'New York JFK'}, dest:{iata:'SFO',name:'San Francisco Intl'} },
+      'ASA887':  { origin:{iata:'SEA',name:'Seattle-Tacoma'}, dest:{iata:'LAX',name:'Los Angeles Intl'} },
+    };
+    const demoAircraft = {
+      'UAL2341':'B737-900 — Boeing 737', 'DAL1887':'A321 — Airbus A321',
+      'AAL504':'B738 — Boeing 737-800', 'SWA3301':'B737 — Boeing 737-700',
+      'SKW5522':'E175 — Embraer 175', 'FFT211':'A320 — Airbus A320',
+      'JBU1044':'A321 — Airbus A321neo', 'ASA887':'B739 — Boeing 737-900',
+      'N7834K':'C172 — Cessna 172', 'EJA552':'C680 — Cessna Citation Sovereign',
+    };
+    if (demoRoutes[f.callsign]) {
+      result.origin = demoRoutes[f.callsign].origin;
+      result.dest   = demoRoutes[f.callsign].dest;
+    }
+    if (!result.aircraft && demoAircraft[f.callsign]) result.aircraft = demoAircraft[f.callsign];
+  }
+
+  enrichCache[key] = result;
+
+  // Only apply if this flight is still selected
+  if (selectedFlight && selectedFlight.icao24 === f.icao24) {
+    applyEnrichment(result);
+  }
+}
+
+function closeFlight() {
+  selectedFlight = null;
+  document.getElementById('detail-card').className = 'detail-card';
+  document.getElementById('map-tooltip').className = 'map-tooltip';
+  renderList();
+}
+
+function toggleTrack() {
+  if (!selectedFlight) return;
+  const isTracked = trackedCallsign && (selectedFlight.callsign === trackedCallsign || selectedFlight.icao24 === trackedCallsign);
+  if (isTracked) {
+    clearTrack();
+  } else {
+    setTrack(selectedFlight.callsign);
+  }
+}
+
+function setTrack(id) {
+  trackedCallsign = id;
+  document.getElementById('tracked-id').textContent = id;
+  document.getElementById('tracked-banner').className = 'tracked-banner visible';
+  renderList();
+  if (selectedFlight) {
+    const btn = document.getElementById('dc-track-btn');
+    btn.textContent = '■ UNTRACK';
+    btn.className = 'dc-track-btn tracking';
+  }
+}
+
+function clearTrack() {
+  trackedCallsign = null;
+  document.getElementById('tracked-banner').className = 'tracked-banner';
+  document.getElementById('search-input').value = '';
+  const btn = document.getElementById('dc-track-btn');
+  btn.textContent = '⊕ TRACK';
+  btn.className = 'dc-track-btn';
+  renderList();
+}
+
+function doSearch() {
+  const val = document.getElementById('search-input').value.trim().toUpperCase();
+  if (!val) return;
+  setTrack(val);
+  // Try to find and select it immediately
+  const found = flights.find(f => f.callsign.toUpperCase() === val || f.icao24.toUpperCase() === val);
+  if (found) selectFlight(found);
+}
+
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+// ── RADAR CANVAS ──
+const canvas = document.getElementById('radar');
+const ctx = canvas.getContext('2d');
+let sweepAngle = 0;
+let trailMap = {}; // icao24 → trail of canvas positions
+
+function startRadar() {
+  function loop() {
+    resize();
+    drawRadar();
+    sweepAngle = (sweepAngle + 0.5) % 360;
+    animFrame = requestAnimationFrame(loop);
+  }
+  loop();
+}
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  if (canvas.width !== rect.width || canvas.height !== rect.height) {
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+}
+
+function drawRadar() {
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  const maxR = Math.min(W, H) * 0.46;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background grid rings
+  const rings = 3;
+  for (let i = 1; i <= rings; i++) {
+    const r = maxR * (i / rings);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.strokeStyle = i === rings ? '#1a3a5c' : '#0f2535';
+    ctx.lineWidth = i === rings ? 1.5 : 1;
+    ctx.stroke();
+    // Distance label
+    const nmLabel = Math.round(RADAR_RADIUS_NM * (i / rings));
+    ctx.fillStyle = '#2a4a6b';
+    ctx.font = '10px Share Tech Mono';
+    ctx.fillText(nmLabel+' nm', cx + r + 4, cy - 3);
+  }
+
+  // ── Chime ring — highlighted inner circle ──
+  const chimeR = maxR * (CHIME_RADIUS_NM / RADAR_RADIUS_NM);
+  if (chimeR < maxR) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, chimeR, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,184,48,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Label
+    ctx.fillStyle = 'rgba(255,184,48,0.5)';
+    ctx.font = '9px Share Tech Mono';
+    ctx.fillText('▶ ' + CHIME_RADIUS_NM + 'nm', cx + chimeR + 4, cy + 10);
+  }
+
+  // Crosshairs
+  ctx.strokeStyle = '#0f2535';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR); ctx.stroke();
+
+  // Sweep gradient
+  const sweepRad = sweepAngle * Math.PI / 180;
+  const sweepLen = maxR;
+  const grad = ctx.createConicalGradient ? null : null;
+  // Draw sweep as a filled arc sector
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, sweepLen, sweepRad - Math.PI * 0.35, sweepRad, false);
+  ctx.closePath();
+  const sweepGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sweepLen);
+  sweepGrad.addColorStop(0, 'rgba(0,255,136,0.0)');
+  sweepGrad.addColorStop(1, 'rgba(0,255,136,0.08)');
+  ctx.fillStyle = sweepGrad;
+  ctx.fill();
+  ctx.restore();
+
+  // Sweep line
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + sweepLen * Math.cos(sweepRad), cy + sweepLen * Math.sin(sweepRad));
+  ctx.strokeStyle = 'rgba(0,255,136,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Center dot (my location)
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI*2);
+  ctx.fillStyle = '#00ff88';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 8, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(0,255,136,0.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── Draw flights ──
+  const latRange = RADIUS_KM() / 111;
+  const lonRange = RADIUS_KM() / (111 * Math.cos(myLat * Math.PI / 180));
+
+  flights.forEach(f => {
+    const dx = (f.lon - myLon) / lonRange;
+    const dy = -(f.lat - myLat) / latRange;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 1) return;
+
+    const px = cx + dx * maxR;
+    const py = cy + dy * maxR;
+
+    const isSelected = selectedFlight && selectedFlight.icao24 === f.icao24;
+    const isTracked = trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign);
+
+    // Store trail
+    if (!trailMap[f.icao24]) trailMap[f.icao24] = [];
+    trailMap[f.icao24].push({x: px, y: py});
+    if (trailMap[f.icao24].length > 12) trailMap[f.icao24].shift();
+
+    // Draw trail
+    const trail = trailMap[f.icao24];
+    if (trail.length > 1) {
+      for (let i = 1; i < trail.length; i++) {
+        const alpha = (i / trail.length) * (isTracked ? 0.6 : 0.25);
+        ctx.beginPath();
+        ctx.moveTo(trail[i-1].x, trail[i-1].y);
+        ctx.lineTo(trail[i].x, trail[i].y);
+        ctx.strokeStyle = isTracked ? `rgba(255,184,48,${alpha})` : `rgba(0,255,136,${alpha})`;
+        ctx.lineWidth = isTracked ? 1.5 : 1;
+        ctx.stroke();
+      }
+    }
+
+    // Draw plane icon
+    drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked);
+
+    // Callsign label
+    if (isSelected || isTracked) {
+      ctx.font = isTracked ? 'bold 11px Share Tech Mono' : '10px Share Tech Mono';
+      ctx.fillStyle = isTracked ? '#ffb830' : '#00ccff';
+      ctx.fillText(f.callsign, px + 12, py - 6);
+    }
+  });
+
+  // ── Map tooltip for selected ──
+  if (selectedFlight) {
+    const f = selectedFlight;
+    const latRange2 = RADIUS_KM() / 111;
+    const lonRange2 = RADIUS_KM() / (111 * Math.cos(myLat * Math.PI / 180));
+    const dx2 = (f.lon - myLon) / lonRange2;
+    const dy2 = -(f.lat - myLat) / latRange2;
+    const px = cx + dx2 * maxR;
+    const py = cy + dy2 * maxR;
+    const tt = document.getElementById('map-tooltip');
+    document.getElementById('tt-callsign').textContent = f.callsign;
+    document.getElementById('tt-alt').textContent = f.baro_alt ? f.baro_alt.toLocaleString()+' ft' : '—';
+    document.getElementById('tt-spd').textContent = f.velocity ? f.velocity+' kts' : '—';
+    document.getElementById('tt-hdg').textContent = f.true_track !== null ? Math.round(f.true_track)+'°' : '—';
+    document.getElementById('tt-dist').textContent = kmToNm(f.dist_km)+' nm';
+    let ttx = px + 14, tty = py - 10;
+    if (ttx + 150 > W) ttx = px - 160;
+    if (tty + 100 > H) tty = py - 110;
+    tt.style.left = ttx + 'px';
+    tt.style.top = tty + 'px';
+    tt.className = 'map-tooltip visible';
+  } else {
+    document.getElementById('map-tooltip').className = 'map-tooltip';
+  }
+}
+
+function drawPlane(ctx, x, y, heading, isSelected, isTracked) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate((heading - 90) * Math.PI / 180); // SVG heading convention
+  const color = isTracked ? '#ffb830' : isSelected ? '#00ccff' : '#00ff88';
+  const size = isSelected || isTracked ? 9 : 6;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.5;
+  // Fuselage
+  ctx.beginPath();
+  ctx.moveTo(0, -size);
+  ctx.lineTo(0, size * 0.6);
+  ctx.stroke();
+  // Wings
+  ctx.beginPath();
+  ctx.moveTo(-size * 1.2, size * 0.1);
+  ctx.lineTo(size * 1.2, size * 0.1);
+  ctx.stroke();
+  // Tail
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.5, size * 0.6);
+  ctx.lineTo(size * 0.5, size * 0.6);
+  ctx.stroke();
+  // Nose dot
+  ctx.beginPath();
+  ctx.arc(0, -size, 2, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // Glow for selected/tracked
+  if (isSelected || isTracked) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, isTracked ? 14 : 11, 0, Math.PI*2);
+    ctx.strokeStyle = isTracked ? 'rgba(255,184,48,0.35)' : 'rgba(0,204,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Canvas click → select nearest flight
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2;
+  const maxR = Math.min(W,H)*0.46;
+  const latRange = RADIUS_KM()/111;
+  const lonRange = RADIUS_KM()/(111*Math.cos(myLat*Math.PI/180));
+  let best = null, bestDist = 20;
+  flights.forEach(f => {
+    const px = cx + ((f.lon - myLon)/lonRange)*maxR;
+    const py = cy - ((f.lat - myLat)/latRange)*maxR;
+    const d = Math.hypot(mx-px, my-py);
+    if (d < bestDist) { bestDist = d; best = f; }
+  });
+  if (best) selectFlight(best);
+});
+
+// ── RADIUS CONTROL ──
+function adjustRadius(deltaNm) {
+  RADAR_RADIUS_NM = Math.max(25, Math.min(300, RADAR_RADIUS_NM + deltaNm));
+  updateRadiusStat();
+  // Re-fetch with new radius
+  refresh();
+}
+
+// ── CHIME TOGGLE ──
+function toggleChime() {
+  CONFIG.chimeEnabled = !CONFIG.chimeEnabled;
+  const btn = document.getElementById('chime-toggle');
+  document.getElementById('chime-state').textContent = CONFIG.chimeEnabled ? 'ON' : 'OFF';
+  btn.className = 'chime-toggle' + (CONFIG.chimeEnabled ? '' : ' muted');
+  document.getElementById('chime-radius-label').style.opacity = CONFIG.chimeEnabled ? '1' : '0.3';
+}
+
+// ── KICK OFF ──
+getLocation();
+</script>
+</body>
+</html>
