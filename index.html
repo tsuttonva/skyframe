@@ -45,15 +45,16 @@
     border-bottom: 1px solid var(--sky-border);
     display: flex;
     align-items: center;
-    padding: 0 20px;
-    gap: 24px;
+    padding: 0 16px;
+    gap: 16px;
+    overflow: hidden;
   }
 
   .logo {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 18px;
+    font-size: 16px;
     color: var(--radar-green);
-    letter-spacing: 3px;
+    letter-spacing: 2px;
     text-transform: uppercase;
     flex-shrink: 0;
     white-space: nowrap;
@@ -63,12 +64,8 @@
 
   .header-stats {
     display: flex;
-    gap: 28px;
-    flex: 1;
-    margin-left: 12px;
-    flex-shrink: 1;
-    min-width: 0;
-    overflow: hidden;
+    gap: 20px;
+    flex-shrink: 0;
   }
 
   .hstat {
@@ -79,58 +76,59 @@
 
   .hstat-val {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 20px;
+    font-size: 18px;
     color: var(--radar-green);
     line-height: 1;
+    white-space: nowrap;
   }
 
   .hstat-label {
-    font-size: 9px;
+    font-size: 8px;
     color: var(--text-dim);
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
     text-transform: uppercase;
-  }
-
-  .clock {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 22px;
-    color: var(--amber);
-    letter-spacing: 2px;
-    margin-left: auto;
+    white-space: nowrap;
   }
 
   .location-label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-dim);
     letter-spacing: 1px;
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
-  .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--radar-green);
-    animation: pulse 2s infinite;
+  #loc-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .clock {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--amber);
+    letter-spacing: 1px;
     flex-shrink: 0;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
-    50% { opacity: 0.7; box-shadow: 0 0 0 5px rgba(0,255,136,0); }
+    white-space: nowrap;
+    text-align: right;
+    line-height: 1.3;
   }
 
   /* ── SEARCH BAR ── */
   .search-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     background: var(--sky-dark);
     border: 1px solid var(--sky-border);
     border-radius: 4px;
-    padding: 4px 10px;
-    margin-left: 16px;
+    padding: 4px 8px;
+    flex-shrink: 0;
   }
 
   .search-bar input {
@@ -139,12 +137,12 @@
     outline: none;
     color: var(--text-main);
     font-family: 'Share Tech Mono', monospace;
-    font-size: 13px;
-    width: 140px;
+    font-size: 12px;
+    width: 110px;
     text-transform: uppercase;
   }
 
-  .search-bar input::placeholder { color: var(--text-muted); text-transform: none; }
+  .search-bar input::placeholder { color: var(--text-muted); text-transform: none; font-size: 11px; }
 
   .search-btn {
     background: var(--radar-ghost);
@@ -152,8 +150,8 @@
     border-radius: 3px;
     color: var(--radar-green);
     font-family: 'Share Tech Mono', monospace;
-    font-size: 11px;
-    padding: 3px 8px;
+    font-size: 10px;
+    padding: 3px 7px;
     cursor: pointer;
     transition: background 0.15s;
     white-space: nowrap;
@@ -166,7 +164,7 @@
     border: none;
     color: var(--text-dim);
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     padding: 0 2px;
     line-height: 1;
   }
@@ -473,94 +471,92 @@
     animation: blink 1s step-end infinite;
   }
 
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--radar-green);
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); }
+  }
+
   /* ── MOBILE / RESPONSIVE ── */
   @media (max-width: 700px) {
     body {
-      grid-template-rows: 48px 1fr 280px 40px;
+      grid-template-rows: 52px 1fr 260px 38px;
       grid-template-columns: 1fr;
       height: 100dvh;
     }
 
-    header {
-      padding: 0 10px;
-      gap: 8px;
-    }
-
-    .logo {
-      font-size: 14px;
-      letter-spacing: 1px;
-    }
-
-    .header-stats {
-      gap: 12px;
-      margin-left: 6px;
-    }
-
-    /* Hide less critical stats on small screens */
-    .hstat:nth-child(3),
-    .hstat:nth-child(4) { display: none; }
-
+    header { gap: 10px; padding: 0 10px; }
+    .logo { font-size: 13px; letter-spacing: 1px; }
+    .header-stats { gap: 14px; }
     .hstat-val { font-size: 15px; }
-    .hstat-label { font-size: 8px; }
+    /* hide Fastest and Radius on portrait phone */
+    .hstat:nth-child(3), .hstat:nth-child(4) { display: none; }
+    .location-label { flex: 1; min-width: 0; }
+    .clock { font-size: 11px; }
+    .search-bar { display: none; } /* moved to footer on mobile */
 
-    .clock { font-size: 14px; letter-spacing: 1px; }
-    .location-label { display: none; }
-
-    .search-bar {
-      margin-left: 4px;
-      padding: 3px 7px;
-    }
-    .search-bar input { width: 80px; font-size: 11px; }
-    .search-btn { font-size: 10px; padding: 2px 6px; }
-
-    .map-area {
-      grid-column: 1;
-      grid-row: 2;
-    }
+    .map-area { grid-column: 1; grid-row: 2; }
 
     .side-panel {
-      grid-column: 1;
-      grid-row: 3;
+      grid-column: 1; grid-row: 3;
       border-left: none;
       border-top: 1px solid var(--sky-border);
       flex-direction: row;
-      overflow: hidden;
     }
 
     .flight-list {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      min-width: 0;
+      flex: 1; min-width: 0;
       border-right: 1px solid var(--sky-border);
     }
 
     .detail-card {
-      width: 195px;
-      flex-shrink: 0;
+      width: 190px; flex-shrink: 0;
       border-top: none;
       overflow-y: auto;
-      padding: 10px 12px;
+      padding: 8px 10px;
     }
 
-    .dc-callsign { font-size: 16px; }
-    .dc-value.big { font-size: 13px; }
-    .dc-apt-code { font-size: 14px; }
+    .dc-callsign { font-size: 15px; }
+    .dc-value.big { font-size: 12px; }
+    .dc-apt-code { font-size: 13px; }
+    .dc-grid { gap: 6px; }
 
     footer {
-      grid-column: 1;
-      grid-row: 4;
-      padding: 0 10px;
-      gap: 10px;
+      grid-column: 1; grid-row: 4;
+      padding: 0 10px; gap: 10px;
       font-size: 9px;
-      overflow-x: auto;
-      white-space: nowrap;
+      overflow-x: auto; white-space: nowrap;
       scrollbar-width: none;
     }
     footer::-webkit-scrollbar { display: none; }
+    .flight-item { padding: 10px 12px; }
+  }
 
-    .flight-item { padding: 12px 14px; }
-    .radius-btn { padding: 2px 7px; font-size: 13px; }
+  @media (max-width: 700px) and (orientation: landscape) {
+    body {
+      grid-template-rows: 46px 1fr 38px;
+      grid-template-columns: 1fr 300px;
+      height: 100dvh;
+    }
+    header { grid-column: 1 / -1; }
+    .map-area { grid-column: 1; grid-row: 2; }
+    .side-panel {
+      grid-column: 2; grid-row: 2;
+      border-left: 1px solid var(--sky-border);
+      border-top: none;
+      flex-direction: column;
+    }
+    footer { grid-column: 1 / -1; grid-row: 3; }
+    .search-bar { display: flex; }
+    .hstat:nth-child(3), .hstat:nth-child(4) { display: flex; }
+    .detail-card { width: 100%; border-top: 1px solid var(--sky-border); }
   }
 
 
@@ -845,7 +841,15 @@ function RADIUS_KM() { return RADAR_RADIUS_NM * 1.852; }
 
 const REFRESH_MS = 30000;
 
-// ── CHIME / VOICE ENGINE ──
+// Safari-compatible fetch with timeout (AbortSignal.timeout fails on Safari/WebKit)
+function fetchWithTimeout(url, options = {}, ms = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
+
 const chimeLog = new Set(); // icao24s that have already triggered a chime this session
 
 function nmFromKm(km) { return km / 1.852; }
@@ -917,8 +921,9 @@ function speakFlight(f, nm) {
 // ── CLOCK ──
 function updateClock() {
   const now = new Date();
-  document.getElementById('clock').textContent =
-    now.toUTCString().slice(17,25) + ' Z';
+  const local = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const zulu  = now.toUTCString().slice(17,22) + 'Z';
+  document.getElementById('clock').innerHTML = `${local}<br><span style="font-size:10px;color:var(--text-dim)">${zulu}</span>`;
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -931,9 +936,7 @@ function getLocation() {
       pos => {
         myLat = pos.coords.latitude;
         myLon = pos.coords.longitude;
-        const latStr = (myLat >= 0 ? myLat.toFixed(3)+'°N' : Math.abs(myLat).toFixed(3)+'°S');
-        const lonStr = (myLon >= 0 ? myLon.toFixed(3)+'°E' : Math.abs(myLon).toFixed(3)+'°W');
-        document.getElementById('loc-label').textContent = `${latStr}  ${lonStr}`;
+        reverseGeocode(myLat, myLon);
         init();
       },
       () => useConfigLocation(),
@@ -949,6 +952,27 @@ function useConfigLocation() {
   myLon = CONFIG.lon;
   document.getElementById('loc-label').textContent = CONFIG.label;
   init();
+}
+
+async function reverseGeocode(lat, lon) {
+  document.getElementById('loc-label').textContent = `${lat.toFixed(3)}°  ${lon.toFixed(3)}°`;
+  try {
+    const r = await fetchWithTimeout(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      { headers: { 'Accept-Language': 'en' } },
+      5000
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const city = d.address.city || d.address.town || d.address.village || d.address.county || '';
+      const state = d.address.state_code || d.address.state || '';
+      const country = d.address.country_code?.toUpperCase();
+      const label = country === 'US'
+        ? `${city}${city && state ? ', ' : ''}${state}`
+        : `${city}${city ? ', ' : ''}${country}`;
+      if (label.trim()) document.getElementById('loc-label').textContent = label;
+    }
+  } catch(_) {}
 }
 
 function setLoadText(t) {
@@ -972,7 +996,7 @@ const CORS_PROXIES = [
 
 async function fetchFromProxy(targetUrl, proxyFn) {
   const proxied = proxyFn(targetUrl);
-  const resp = await fetch(proxied, { signal: AbortSignal.timeout(8000) });
+  const resp = await fetchWithTimeout(proxied, {}, 8000);
   if (!resp.ok) throw new Error(resp.status);
   const wrapper = await resp.json();
   const data = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
@@ -982,29 +1006,30 @@ async function fetchFromProxy(targetUrl, proxyFn) {
 async function fetchFlights() {
   const margin = Math.max(2.5, RADIUS_KM() / 111);
 
-  // 1. ADS-B Exchange — best CORS support, real data, no key needed for basic use
+  // 1. ADS-B Exchange (adsb.lol) — CORS-friendly, real data
   try {
     const url = `https://api.adsb.lol/v2/lat/${myLat.toFixed(4)}/lon/${myLon.toFixed(4)}/dist/${Math.ceil(RADAR_RADIUS_NM)}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const resp = await fetchWithTimeout(url, {}, 10000);
     if (resp.ok) {
       const data = await resp.json();
-      if (data.ac && data.ac.length >= 0) {
-        setSourceStatus('ok', 'ADS-B Exchange');
-        return parseAdsbLol(data.ac);
+      if (data && Array.isArray(data.ac)) {
+        const parsed = parseAdsbLol(data.ac);
+        setSourceStatus('ok', `ADS-B Exchange (${parsed.length})`);
+        return parsed;
       }
     }
-  } catch(_) {}
+  } catch(e) { console.warn('adsb.lol failed:', e.message); }
 
-  // 2. OpenSky direct (works on Pi without CORS issues)
+  // 2. OpenSky direct (works on Pi)
   try {
     const targetUrl = OPENSKY_DIRECT(myLat, myLon, margin);
-    const resp = await fetch(targetUrl, { signal: AbortSignal.timeout(8000) });
+    const resp = await fetchWithTimeout(targetUrl, {}, 8000);
     if (resp.ok) {
       const data = await resp.json();
       setSourceStatus('ok', 'OpenSky Network');
       return parseFlightsOpenSky(data.states || []);
     }
-  } catch(_) {}
+  } catch(e) { console.warn('OpenSky direct failed:', e.message); }
 
   // 3. OpenSky via CORS proxy
   for (const proxyFn of CORS_PROXIES) {
@@ -1013,7 +1038,7 @@ async function fetchFlights() {
       const data = await fetchFromProxy(targetUrl, proxyFn);
       setSourceStatus('ok', 'OpenSky (proxy)');
       return parseFlightsOpenSky(data.states || []);
-    } catch(_) {}
+    } catch(e) { console.warn('proxy failed:', e.message); }
   }
 
   // 4. Demo fallback
@@ -1118,6 +1143,7 @@ function kmToNm(km) { return (km * 0.539957).toFixed(1); }
 // ── INIT ──
 async function init() {
   setLoadText('CONNECTING TO OPENSKY...');
+  loadMapGeo(); // async, non-blocking
   flights = await fetchFlights();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('status-update').textContent =
@@ -1275,7 +1301,7 @@ async function fetchEnrichment(f) {
 
   // --- Source 1: adsb.lol /v2/icao/{hex} — gives route + aircraft type ---
   try {
-    const r = await fetch(`https://api.adsb.lol/v2/icao/${f.icao24}`, { signal: AbortSignal.timeout(6000) });
+    const r = await fetchWithTimeout(`https://api.adsb.lol/v2/icao/${f.icao24}`, {}, 6000);
     if (r.ok) {
       const d = await r.json();
       const ac = d.ac && d.ac[0];
@@ -1289,12 +1315,11 @@ async function fetchEnrichment(f) {
           const cs = ac.flight.trim();
           // Try to get route from adsb.lol route endpoint
           try {
-            const rr = await fetch(`https://api.adsb.lol/api/0/routeset`, {
+            const rr = await fetchWithTimeout(`https://api.adsb.lol/api/0/routeset`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planes: [{ callsign: cs, lat: f.lat, lng: f.lon }] }),
-              signal: AbortSignal.timeout(5000)
-            });
+            }, 5000);
             if (rr.ok) {
               const rd = await rr.json();
               if (rd && rd[0] && rd[0].airport_codes) {
@@ -1312,7 +1337,7 @@ async function fetchEnrichment(f) {
   // --- Source 2: adsbdb.com — aircraft registration/type fallback ---
   if (!result.aircraft || !result.registration) {
     try {
-      const r = await fetch(`https://www.adsbdb.com/api/aircraft/${f.icao24}`, { signal: AbortSignal.timeout(5000) });
+      const r = await fetchWithTimeout(`https://www.adsbdb.com/api/aircraft/${f.icao24}`, {}, 5000);
       if (r.ok) {
         const d = await r.json();
         const ac = d.response && d.response.aircraft;
@@ -1419,6 +1444,120 @@ const ctx = canvas.getContext('2d');
 let sweepAngle = 0;
 let trailMap = {}; // icao24 → trail of canvas positions
 
+// ── MAP OUTLINES ──
+let mapGeo = null; // cached GeoJSON features
+
+async function loadMapGeo() {
+  if (mapGeo !== null) return;
+  mapGeo = []; // prevent multiple fetches
+  try {
+    // Natural Earth 110m countries + US states — tiny files, no auth needed
+    const [countriesRes, statesRes] = await Promise.all([
+      fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'),
+      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'),
+    ]);
+    const topoToGeo = (topo, key) => {
+      // Minimal TopoJSON→GeoJSON without a library
+      // We only need the arcs, not full projection
+      return topo.objects[key];
+    };
+    if (countriesRes.ok) {
+      const topo = await countriesRes.json();
+      mapGeo.push({ topo, key: 'countries', color: 'rgba(26,58,92,0.6)', width: 0.8 });
+    }
+    if (statesRes.ok) {
+      const topo = await statesRes.json();
+      mapGeo.push({ topo, key: 'states', color: 'rgba(20,50,80,0.9)', width: 0.6 });
+    }
+  } catch(_) {}
+}
+
+// Convert TopoJSON arcs to canvas paths
+function drawMapOutlines(ctx, cx, cy, maxR) {
+  if (!mapGeo || mapGeo.length === 0) return;
+
+  const latRange = RADIUS_KM() / 111;
+  const lonRange = RADIUS_KM() / (111 * Math.cos(myLat * Math.PI / 180));
+
+  function latLonToCanvas(lat, lon) {
+    const dx = (lon - myLon) / lonRange;
+    const dy = -(lat - myLat) / latRange;
+    return [cx + dx * maxR, cy + dy * maxR];
+  }
+
+  ctx.save();
+  // Clip to radar circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+  ctx.clip();
+
+  for (const layer of mapGeo) {
+    const { topo, key, color, width } = layer;
+    if (!topo || !topo.arcs) continue;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+
+    const obj = topo.objects[key];
+    if (!obj) continue;
+
+    // Decode TopoJSON arcs
+    const scale = topo.transform ? topo.transform.scale : [1, 1];
+    const translate = topo.transform ? topo.transform.translate : [0, 0];
+
+    // Collect all geometry rings
+    const rings = [];
+    function collectArcs(geometry) {
+      if (!geometry) return;
+      if (geometry.type === 'GeometryCollection') {
+        geometry.geometries.forEach(collectArcs);
+      } else if (geometry.type === 'Polygon') {
+        geometry.arcs.forEach(ring => rings.push(ring));
+      } else if (geometry.type === 'MultiPolygon') {
+        geometry.arcs.forEach(poly => poly.forEach(ring => rings.push(ring)));
+      }
+    }
+    collectArcs(obj);
+
+    for (const ring of rings) {
+      let prevX = null, prevY = null;
+      let drawn = false;
+      ctx.beginPath();
+
+      for (const arcIdx of ring) {
+        const reversed = arcIdx < 0;
+        const arc = topo.arcs[reversed ? ~arcIdx : arcIdx];
+        if (!arc) continue;
+
+        let x = 0, y = 0;
+        const pts = reversed ? [...arc].reverse() : arc;
+        for (let i = 0; i < pts.length; i++) {
+          const pt = pts[i];
+          x += pt[0]; y += pt[1];
+          const lon = x * scale[0] + translate[0];
+          const lat = y * scale[1] + translate[1];
+          const [px, py] = latLonToCanvas(lat, lon);
+
+          // Skip if wildly off screen (>3x radius away)
+          if (Math.abs(px - cx) > maxR * 3 || Math.abs(py - cy) > maxR * 3) {
+            prevX = null; prevY = null; continue;
+          }
+
+          if (prevX === null || (i === 0 && !reversed)) {
+            ctx.moveTo(px, py);
+          } else {
+            ctx.lineTo(px, py);
+            drawn = true;
+          }
+          prevX = px; prevY = py;
+        }
+      }
+      if (drawn) ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 function startRadar() {
   function loop() {
     resize();
@@ -1480,6 +1619,9 @@ function drawRadar() {
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR); ctx.stroke();
+
+  // ── Geographic outlines ──
+  drawMapOutlines(ctx, cx, cy, maxR);
 
   // Sweep gradient
   const sweepRad = sweepAngle * Math.PI / 180;
