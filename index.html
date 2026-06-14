@@ -49,10 +49,14 @@
     border-bottom: 1px solid var(--sky-border);
     display: flex;
     align-items: center;
-    padding: 0 16px;
+    padding: 0 12px;
     gap: 16px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
   }
+  header::-webkit-scrollbar { display: none; }
 
   .logo-block {
     flex-shrink: 0;
@@ -102,6 +106,8 @@
     flex-shrink: 0;
   }
 
+  .hstat { flex-shrink: 0; }
+
   .hstat {
     display: flex;
     flex-direction: column;
@@ -131,16 +137,9 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    flex: 1;
-    min-width: 0;
+    flex-shrink: 0;
     cursor: pointer;
-  }
-
-  #loc-label {
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
   }
 
   .clock {
@@ -540,16 +539,13 @@
       grid-template-columns: 1fr;
       grid-template-areas: "hdr" "map" "panel" "ftr";
     }
-    header { gap: 8px; padding: 0 12px; }
+    header { gap: 16px; padding: 0 12px; }
     .logo { font-size: 13px; letter-spacing: 1px; }
-    .header-stats { gap: 12px; }
+    .ver-label { font-size: 7px; }
+    .header-stats { gap: 14px; }
     .hstat-val { font-size: 16px; }
     .hstat-label { font-size: 8px; }
-    .hstat:nth-child(3) { display: none; }
-    .hstat:nth-child(4) { display: flex; }
-    .location-label { flex: 1; min-width: 0; }
     .clock { font-size: 11px; }
-    .search-bar { display: none; }
     .side-panel { flex-direction: row; border-left: none; border-top: 1px solid var(--sky-border); }
     .retro-board { border-left: none; border-top: 1px solid rgba(255,184,48,0.2); }
     .flight-list { flex: 1; min-width: 0; overflow-y: auto; border-right: 1px solid var(--sky-border); }
@@ -1011,7 +1007,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.0';
+const VERSION = 'v2.1';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -2509,14 +2505,13 @@ canvas.addEventListener('click', e => {
 // Three methods: hex range, callsign prefix, known military type codes
 
 const MILITARY_HEX_RANGES = [
-  // US DoD blocks (FAA assigned)
+  // US DoD specific blocks (FAA assigned to military)
   [0xADF000, 0xAFFFFF], // US military primary block
-  [0xA00000, 0xA3FFFF], // Shared US block, heavy military presence
-  // NATO / allied
+  [0xA9F000, 0xA9FFFF], // DoD supplemental
+  // NATO / allied military
   [0x3A0000, 0x3BFFFF], // Germany military
-  [0x3C0000, 0x3DFFFF], // Germany (Luftwaffe)
-  [0x440000, 0x447FFF], // UK military
-  [0x7C0000, 0x7FFFFF], // Australia (includes RAAF)
+  [0x440000, 0x447FFF], // UK military (RAF)
+  [0x43C000, 0x43CFFF], // UK military additional
 ];
 
 const MILITARY_CALLSIGN_PREFIXES = [
@@ -2570,17 +2565,35 @@ const MILITARY_TYPE_CODES = new Set([
   'C21','C37','C40','C32','C20',
 ]);
 
+// Known civilian airline prefixes — never flag these as military
+// even if callsign accidentally matches a military prefix
+const CIVILIAN_PREFIXES = new Set([
+  'DAL','UAL','AAL','SWA','JBU','ASA','SKW','FFT','RPA','ENY',
+  'PDT','CPZ','EJA','FDX','UPS','WJA','ACA','BAW','DLH','AFR',
+  'KLM','IBE','VIR','ETD','QTR','SIA','CPA','ANZ','QFA','THA',
+  'CSN','CCA','CHH','CAL','EVA','KAL','AAR','JJA','APJ',
+  'N',   // N-number prefix (GA aircraft) — never military by callsign
+]);
+
 function isMilitary(f) {
+  const cs = (f.callsign || '').toUpperCase().trim();
+
+  // Never flag known civilian airlines
+  const csPrefix3 = cs.slice(0, 3);
+  const csPrefix2 = cs.slice(0, 2);
+  if (CIVILIAN_PREFIXES.has(csPrefix3) || CIVILIAN_PREFIXES.has(csPrefix2)) return false;
+  // N-numbers (GA registrations like N1234A) are never military
+  if (/^N\d/.test(cs)) return false;
+
   // 1. Check ICAO hex range
-  const hexVal = parseInt(f.icao24, 16);
+  const hexVal = parseInt((f.icao24 || ''), 16);
   if (!isNaN(hexVal)) {
     for (const [lo, hi] of MILITARY_HEX_RANGES) {
       if (hexVal >= lo && hexVal <= hi) return true;
     }
   }
 
-  // 2. Check callsign prefix
-  const cs = (f.callsign || '').toUpperCase().trim();
+  // 2. Check callsign prefix against military list
   if (cs) {
     for (const prefix of MILITARY_CALLSIGN_PREFIXES) {
       if (cs.startsWith(prefix)) return true;
@@ -2704,7 +2717,19 @@ function toggleChime() {
   document.getElementById('chime-radius-label').style.opacity = CONFIG.chimeEnabled ? '1' : '0.3';
 }
 
-// ── KICK OFF ──
+// ── SPEECH SYNTHESIS UNLOCK (iOS requires user gesture) ──
+let speechUnlocked = false;
+function unlockSpeech() {
+  if (speechUnlocked || !window.speechSynthesis) return;
+  // Speak empty string to unlock — iOS requires this after a user tap
+  const u = new SpeechSynthesisUtterance('');
+  u.volume = 0;
+  window.speechSynthesis.speak(u);
+  speechUnlocked = true;
+}
+// Unlock on first tap anywhere
+document.addEventListener('touchstart', unlockSpeech, { once: true });
+document.addEventListener('click', unlockSpeech, { once: true });
 initTheme();
 getLocation();
 </script>
