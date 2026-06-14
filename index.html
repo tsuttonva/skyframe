@@ -954,6 +954,7 @@ let CHIME_RADIUS_NM = CONFIG.chimeRadiusNm;
 function RADIUS_KM() { return RADAR_RADIUS_NM * 1.852; }
 
 const REFRESH_MS = 30000;
+let appInitialized = false;
 
 // Timeout via Promise.race — no AbortController, works in all Safari versions
 function fetchWithTimeout(url, options = {}, ms = 8000) {
@@ -1111,7 +1112,7 @@ async function applyLocation(lat, lon, label) {
   setTimeout(() => {
     closeLocModal();
     chimeLog.clear(); workingSource = null;
-    if (typeof flights !== 'undefined' && flights.length >= 0) refresh();
+    if (locationSet && appInitialized) refresh();
     else init();
   }, 700);
 }
@@ -1396,8 +1397,9 @@ function kmToNm(km) { return (km * 0.539957).toFixed(1); }
 // ── INIT ──
 async function init() {
   setLoadText('CONNECTING TO OPENSKY...');
-  loadMapGeo(); // async, non-blocking
+  loadMapGeo();
   flights = await fetchFlights();
+  appInitialized = true;
   document.getElementById('loading').style.display = 'none';
   document.getElementById('status-update').textContent =
     new Date().toISOString().slice(11,19) + ' Z';
