@@ -339,7 +339,21 @@
     text-transform: uppercase;
   }
 
-  .alt-bar {
+  .fi-type-row {
+    padding: 1px 0 3px;
+  }
+
+  .fi-type {
+    font-size: 9px;
+    color: var(--amber);
+    letter-spacing: 0.5px;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    max-width: 100%;
+  }
     flex: 1;
     height: 2px;
     background: var(--text-muted);
@@ -1167,9 +1181,206 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.4';
+const VERSION = 'v1.5';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
+
+// ── ICAO AIRCRAFT TYPE LOOKUP (ICAO Doc 8643) ──
+const ICAO_TYPES = {
+  "A124": "Antonov AN-124 Ruslan",
+  "A140": "Antonov AN-140",
+  "A225": "Antonov An-225 Mriya",
+  "A306": "Airbus A300-600",
+  "A30B": "Airbus A300",
+  "A310": "Airbus A310",
+  "A318": "Airbus A318",
+  "A319": "Airbus A319",
+  "A320": "Airbus A320",
+  "A321": "Airbus A321",
+  "A330": "Airbus A330",
+  "A332": "Airbus A330-200",
+  "A333": "Airbus A330-300",
+  "A338": "Airbus A330-800",
+  "A339": "Airbus A330-900",
+  "A340": "Airbus A340",
+  "A342": "Airbus A340-200",
+  "A343": "Airbus A340-300",
+  "A345": "Airbus A340-500",
+  "A346": "Airbus A340-600",
+  "A350": "Airbus A350",
+  "A358": "Airbus A350-800",
+  "A359": "Airbus A350-900",
+  "A35K": "Airbus A350-1000",
+  "A388": "Airbus A380-800",
+  "A3ST": "Airbus A300-600ST Beluga",
+  "AN12": "Antonov AN-12",
+  "AN24": "Antonov AN-24",
+  "AN26": "Antonov AN-26",
+  "AN72": "Antonov AN-72",
+  "AT43": "ATR 42-300",
+  "AT45": "ATR 42-500",
+  "AT46": "ATR 42-600",
+  "AT72": "ATR 72",
+  "AT73": "ATR 72-200",
+  "AT75": "ATR 72-500",
+  "AT76": "ATR 72-600",
+  "ATP": "BAe ATP",
+  "B190": "Beechcraft 1900",
+  "B212": "Bell 212",
+  "B37M": "Boeing 737 MAX 7",
+  "B38M": "Boeing 737 MAX 8",
+  "B39M": "Boeing 737 MAX 9",
+  "B3XM": "Boeing 737 MAX 10",
+  "B412": "Bell 412",
+  "B429": "Bell 429",
+  "B461": "BAe 146-100",
+  "B462": "BAe 146-200",
+  "B463": "BAe 146-300",
+  "B52": "Boeing B-52 Stratofortress",
+  "B703": "Boeing 707",
+  "B712": "Boeing 717",
+  "B721": "Boeing 727-100",
+  "B722": "Boeing 727-200",
+  "B731": "Boeing 737-100",
+  "B732": "Boeing 737-200",
+  "B733": "Boeing 737-300",
+  "B734": "Boeing 737-400",
+  "B735": "Boeing 737-500",
+  "B736": "Boeing 737-600",
+  "B737": "Boeing 737-700",
+  "B738": "Boeing 737-800",
+  "B739": "Boeing 737-900",
+  "B741": "Boeing 747-100",
+  "B742": "Boeing 747-200",
+  "B743": "Boeing 747-300",
+  "B744": "Boeing 747-400",
+  "B748": "Boeing 747-8",
+  "B752": "Boeing 757-200",
+  "B753": "Boeing 757-300",
+  "B762": "Boeing 767-200",
+  "B763": "Boeing 767-300",
+  "B764": "Boeing 767-400",
+  "B772": "Boeing 777-200",
+  "B773": "Boeing 777-300",
+  "B779": "Boeing 777X",
+  "B77L": "Boeing 777-200LR",
+  "B77W": "Boeing 777-300ER",
+  "B788": "Boeing 787-8 Dreamliner",
+  "B789": "Boeing 787-9 Dreamliner",
+  "B78J": "Boeing 787-10 Dreamliner",
+  "BCS1": "Bombardier C Series 100",
+  "BCS3": "Bombardier C Series 300",
+  "BE20": "Beechcraft King Air 200",
+  "BE35": "Beechcraft Bonanza",
+  "BE58": "Beechcraft Baron 58",
+  "BLCF": "Boeing 747 Dreamlifter",
+  "C130": "Lockheed C-130 Hercules",
+  "C17": "Boeing C-17 Globemaster",
+  "C172": "Cessna 172 Skyhawk",
+  "C182": "Cessna 182 Skylane",
+  "C2": "Grumman C-2 Greyhound",
+  "C208": "Cessna 208 Caravan",
+  "C25A": "Cessna Citation CJ2",
+  "C25B": "Cessna Citation CJ3",
+  "C25C": "Cessna Citation CJ4",
+  "C500": "Cessna Citation I",
+  "C510": "Cessna Citation Mustang",
+  "C525": "Cessna CitationJet",
+  "C550": "Cessna Citation II",
+  "C560": "Cessna Citation V",
+  "C56X": "Cessna Citation Excel",
+  "C5M": "Lockheed C-5 Galaxy",
+  "C650": "Cessna Citation III",
+  "C680": "Cessna Citation Sovereign",
+  "C750": "Cessna Citation X",
+  "CL60": "Canadair Challenger",
+  "CRJ1": "Canadair RJ 100",
+  "CRJ2": "Canadair RJ 200",
+  "CRJ7": "Canadair RJ 700",
+  "CRJ9": "Canadair RJ 900",
+  "CRJX": "Canadair RJ 1000",
+  "D228": "Dornier Do.228",
+  "D328": "Dornier Do.328",
+  "DC10": "Douglas DC-10",
+  "DC3": "Douglas DC-3",
+  "DC6": "Douglas DC-6",
+  "DC9": "Douglas DC-9",
+  "DC91": "Douglas DC-9-10",
+  "DC93": "Douglas DC-9-30",
+  "DC95": "Douglas DC-9-50",
+  "DH8A": "De Havilland Dash 8-100",
+  "DH8B": "De Havilland Dash 8-200",
+  "DH8C": "De Havilland Dash 8-300",
+  "DH8D": "De Havilland Dash 8-400",
+  "DHC6": "De Havilland DHC-6 Twin Otter",
+  "E135": "Embraer RJ135",
+  "E145": "Embraer RJ145",
+  "E170": "Embraer 170",
+  "E175": "Embraer 175",
+  "E190": "Embraer 190",
+  "E195": "Embraer 195",
+  "E290": "Embraer E190-E2",
+  "E295": "Embraer E195-E2",
+  "E3TF": "Boeing E-3 Sentry",
+  "E50P": "Embraer Phenom 100",
+  "E55P": "Embraer Phenom 300",
+  "EC45": "Eurocopter EC145",
+  "F100": "Fokker 100",
+  "F16": "General Dynamics F-16",
+  "F18S": "Boeing F/A-18 Super Hornet",
+  "F27": "Fokker F27 Friendship",
+  "F28": "Fokker F28 Fellowship",
+  "F2TH": "Dassault Falcon 2000",
+  "F50": "Fokker 50",
+  "F70": "Fokker 70",
+  "GLEX": "Bombardier Global Express",
+  "GLF4": "Gulfstream IV",
+  "GLF5": "Gulfstream V",
+  "GLF6": "Gulfstream G650",
+  "H25B": "Hawker 700/800/900",
+  "IL76": "Ilyushin IL-76",
+  "J328": "Dornier 328JET",
+  "JS31": "BAe Jetstream 31",
+  "JS41": "BAe Jetstream 41",
+  "K35R": "Boeing KC-135 Stratotanker",
+  "L101": "Lockheed L-1011 TriStar",
+  "L410": "LET 410",
+  "MD11": "McDonnell Douglas MD-11",
+  "MD81": "MD-81",
+  "MD82": "MD-82",
+  "MD83": "MD-83",
+  "MD88": "MD-88",
+  "MD90": "MD-90",
+  "P8": "Boeing P-8 Poseidon",
+  "PA28": "Piper PA-28 Cherokee",
+  "PA31": "Piper Navajo",
+  "PA46": "Piper PA-46 Malibu",
+  "PC12": "Pilatus PC-12",
+  "RJ1H": "Avro RJ100",
+  "RJ70": "Avro RJ70",
+  "RJ85": "Avro RJ85",
+  "S76": "Sikorsky S-76",
+  "S92": "Sikorsky S-92",
+  "SB20": "Saab 2000",
+  "SF34": "Saab SF340",
+  "SF50": "Cirrus Vision SF50",
+  "SH36": "Shorts SD.360",
+  "SR20": "Cirrus SR20",
+  "SR22": "Cirrus SR22",
+  "SU95": "Sukhoi Superjet 100",
+  "T134": "Tupolev Tu-134",
+  "T154": "Tupolev Tu-154",
+  "T204": "Tupolev Tu-204",
+  "V22": "Bell Boeing V-22 Osprey",
+  "YK40": "Yakovlev Yak-40",
+  "YK42": "Yakovlev Yak-42"
+};
+
+function lookupIcaoType(code) {
+  if (!code) return null;
+  return ICAO_TYPES[code.toUpperCase()] || null;
+}
+
 
 const CONFIG = {
   lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
@@ -1563,10 +1774,11 @@ function parseAdsbLol(ac) {
       lat: a.lat,
       baro_alt: a.alt_baro && a.alt_baro !== 'ground' ? Math.round(Number(a.alt_baro)) : null,
       on_ground: !!a.gnd,
-      velocity: a.gs ? Math.round(a.gs) : null,           // ground speed in knots
+      velocity: a.gs ? Math.round(a.gs) : null,
       true_track: a.track || 0,
       vert_rate: a.baro_rate ? Math.round(a.baro_rate).toString() : null,
       squawk: a.squawk || '—',
+      aircraft_type: a.t || null,   // ICAO type code e.g. "B738"
       dist_km: haversine(myLat, myLon, a.lat, a.lon),
     }))
     .filter(f => f.dist_km <= RADIUS_KM())
@@ -1720,6 +1932,12 @@ function renderList() {
     const vrateStr = f.vert_rate !== null
       ? (parseInt(f.vert_rate) > 200 ? '▲' : parseInt(f.vert_rate) < -200 ? '▼' : '→')
       : '→';
+    // ICAO type lookup
+    const typeCode = f.aircraft_type || null;
+    const typeName = typeCode ? lookupIcaoType(typeCode) : null;
+    const typeTag = typeCode
+      ? `<span class="fi-type" title="${typeName || typeCode}">${typeCode}${typeName ? ' · '+typeName : ''}</span>`
+      : '';
     div.innerHTML = `
       <div class="fi-top">
         <div class="fi-callsign ${isTracked ? 'tracked' : ''}">${isTracked ? '▶ ':''} ${f.callsign}</div>
@@ -1731,6 +1949,7 @@ function renderList() {
         <span>${f.true_track ? Math.round(f.true_track)+'°' : '—'}</span>
         <span>${f.country}</span>
       </div>
+      ${typeTag ? `<div class="fi-type-row">${typeTag}</div>` : ''}
       <div class="fi-bar">
         <span>FL${f.baro_alt ? String(Math.round(f.baro_alt/100)).padStart(3,'0') : '---'}</span>
         <div class="alt-bar"><div class="alt-fill" style="width:${altPct}%"></div></div>
@@ -1762,6 +1981,14 @@ function selectFlight(f) {
 
   // Reset route/aircraft to loading state
   setRouteLoading();
+
+  // Show local type lookup immediately (no API call needed)
+  if (f.aircraft_type) {
+    const localName = lookupIcaoType(f.aircraft_type);
+    const localStr = localName ? `${f.aircraft_type} — ${localName}` : f.aircraft_type;
+    document.getElementById('dc-aircraft').textContent = localStr;
+    document.getElementById('dc-aircraft').style.color = 'var(--amber)';
+  }
 
   const isTracked = trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign);
   const btn = document.getElementById('dc-track-btn');
@@ -2475,11 +2702,18 @@ function renderRetroBoard() {
     const vr = f.vert_rate ? parseFloat(f.vert_rate) : 0;
     const arrow = vr > 100 ? '↑' : vr < -100 ? '↓' : '';
 
+    const typeCode = f.aircraft_type || null;
+    const typeName = typeCode ? lookupIcaoType(typeCode) : null;
+    const typeStr = typeCode ? `${typeCode}${typeName ? ' · '+typeName : ''}` : '';
+
     const row = document.createElement('div');
     row.className = `retro-row${isSelected ? ' selected' : ''}${inChimeZone ? ' chime-zone' : ''}`;
     row.onclick = () => selectFlight(f);
     row.innerHTML = `
-      <div class="retro-cs">${f.callsign || f.icao24}</div>
+      <div>
+        <div class="retro-cs">${f.callsign || f.icao24}</div>
+        ${typeStr ? `<div style="font-size:8px;color:rgba(255,184,48,0.45);letter-spacing:0.5px;margin-top:1px">${typeStr}</div>` : ''}
+      </div>
       <div class="retro-alt">${fl}<span class="retro-vr">${arrow}</span></div>
       <div class="retro-spd">${spd}</div>
       <div class="retro-dist">${dist}</div>
