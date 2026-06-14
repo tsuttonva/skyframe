@@ -18,8 +18,8 @@
     --amber: #ffb830;
     --amber-dim: #7a5200;
     --text-main: #cce8ff;
-    --text-dim: #4a7a9b;
-    --text-muted: #2a4a6b;
+    --text-dim: #6a9abf;
+    --text-muted: #3a5a7b;
     --highlight: #00ccff;
     --danger: #ff4466;
   }
@@ -84,7 +84,7 @@
 
   .hstat-label {
     font-size: 8px;
-    color: var(--text-dim);
+    color: #4a7a9b;
     letter-spacing: 1px;
     text-transform: uppercase;
     white-space: nowrap;
@@ -507,17 +507,19 @@
   }
 
   /* ── MOBILE PORTRAIT (phones in portrait) ── */
-  @media (max-width: 500px) {
+  @media (max-width: 768px) and (orientation: portrait) {
     body {
-      grid-template-rows: 52px 1fr 260px 38px;
+      grid-template-rows: 56px 1fr 260px 38px;
       grid-template-columns: 1fr;
       height: 100dvh;
     }
-    header { gap: 8px; padding: 0 10px; }
-    .logo { font-size: 13px; letter-spacing: 1px; }
-    .header-stats { gap: 12px; flex-shrink: 0; }
-    .hstat-val { font-size: 15px; }
-    .hstat:nth-child(3), .hstat:nth-child(4) { display: none; }
+    header { gap: 10px; padding: 0 12px; flex-wrap: nowrap; overflow: hidden; }
+    .logo { font-size: 13px; letter-spacing: 1px; flex-shrink: 0; }
+    .header-stats { gap: 14px; flex-shrink: 0; }
+    .hstat-val { font-size: 16px; }
+    .hstat-label { font-size: 8px; }
+    .hstat:nth-child(3) { display: none; }
+    .hstat:nth-child(4) { display: flex; }
     .location-label { flex: 1; min-width: 0; display: flex; }
     .clock { font-size: 11px; flex-shrink: 0; }
     .search-bar { display: none; }
@@ -546,7 +548,7 @@
       grid-template-columns: 1fr 290px;
       height: 100dvh;
     }
-    header { grid-column: 1 / -1; gap: 10px; padding: 0 10px; }
+    header { grid-column: 1 / -1; grid-row: 1; gap: 10px; padding: 0 10px; }
     .logo { font-size: 12px; letter-spacing: 1px; }
     .header-stats { gap: 10px; flex-shrink: 0; }
     .hstat-val { font-size: 13px; }
@@ -1033,7 +1035,7 @@
 </div>
 
 <header>
-  <div class="logo">◈ SKY<span>FRAME</span> <span id="ver-label" style="font-size:9px;letter-spacing:1px;color:var(--text-muted);margin-left:2px;"></span></div>
+  <div class="logo">◈ SKY<span>FRAME</span> <span id="ver-label" style="font-size:9px;letter-spacing:1px;color:#6a9abf;margin-left:4px;"></span></div>
   <div class="header-stats">
     <div class="hstat">
       <div class="hstat-val" id="stat-count">—</div>
@@ -1200,7 +1202,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.7';
+const VERSION = 'v1.8';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
