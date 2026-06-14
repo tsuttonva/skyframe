@@ -647,8 +647,39 @@
   body.retro .search-bar input { color: #ffb830; }
   body.retro footer { border-top: 1px solid rgba(255,184,48,0.2); }
   body.retro .chime-toggle { border-color: rgba(255,184,48,0.4); color: #ffb830; }
-  body.retro .radius-btn { border-color: rgba(255,184,48,0.3); color: rgba(255,184,48,0.6); }
-  body.retro .radius-btn:hover { border-color: #ffb830; color: #ffb830; }
+  body.retro .radius-btn { border-color: rgba(255,184,48,0.3); color: rgba(255,184,48,0.5); background: rgba(255,184,48,0.05); }
+  body.retro .radius-btn:hover { border-color: #ffb830; color: #ffb830; background: rgba(255,184,48,0.1); }
+
+  body.retro .map-tooltip {
+    background: rgba(8,6,0,0.95);
+    border-color: rgba(255,184,48,0.5);
+    color: #ffb830;
+  }
+  body.retro .tip-callsign { color: #ffb830; }
+  body.retro .tip-label { color: rgba(255,184,48,0.5); }
+  body.retro .tip-val { color: rgba(255,184,48,0.8); }
+
+  body.retro .search-bar {
+    border-color: rgba(255,184,48,0.25);
+    background: rgba(255,184,48,0.05);
+  }
+  body.retro .search-bar input { color: #ffb830; }
+  body.retro .search-bar input::placeholder { color: rgba(255,184,48,0.3); }
+  body.retro .search-btn {
+    border-color: rgba(255,184,48,0.4);
+    color: #ffb830;
+    background: rgba(255,184,48,0.08);
+  }
+  body.retro .search-btn:hover { background: rgba(255,184,48,0.2); }
+  body.retro .clear-btn { color: rgba(255,184,48,0.4); }
+
+  body.retro footer {
+    background: #0d0a00;
+    border-top: 1px solid rgba(255,184,48,0.2);
+    color: rgba(255,184,48,0.5);
+  }
+  body.retro .status-ok { color: #ffb830; }
+  body.retro .chime-toggle.muted { border-color: rgba(255,184,48,0.2); color: rgba(255,184,48,0.3); }
 
   /* Retro board panel */
   .retro-board {
@@ -894,20 +925,37 @@
     animation: blink 1s step-end infinite;
   }
 
-  /* ── RADIUS CONTROLS ── */
-  .radius-btn {
-    background: none;
-    border: 1px solid var(--text-muted);
-    border-radius: 2px;
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: 'Share Tech Mono', monospace;
-    padding: 0 4px;
-    cursor: pointer;
-    line-height: 1.4;
-    transition: all 0.15s;
+  .radius-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
-  .radius-btn:hover { border-color: var(--radar-green); color: var(--radar-green); }
+
+  .radius-hstat { flex-shrink: 0; }
+
+  .radius-btn {
+    background: var(--sky-dark);
+    border: 1px solid var(--sky-border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-family: 'Share Tech Mono', monospace;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    line-height: 1;
+    padding: 0;
+  }
+  .radius-btn:hover {
+    border-color: var(--radar-green);
+    color: var(--radar-green);
+    background: var(--radar-ghost);
+  }
 
   /* ── CHIME TOGGLE ── */
   .chime-toggle {
@@ -966,11 +1014,13 @@
       <div class="hstat-val" id="stat-fastest">—</div>
       <div class="hstat-label">Fastest kts</div>
     </div>
-    <div class="hstat">
-      <div class="hstat-val" id="stat-radius">150</div>
-      <div class="hstat-label">
+    <div class="hstat radius-hstat">
+      <div class="radius-control">
         <button class="radius-btn" onclick="adjustRadius(-25)" title="Shrink radius">−</button>
-        Radius nm
+        <div>
+          <div class="hstat-val" id="stat-radius">50</div>
+          <div class="hstat-label">NM</div>
+        </div>
         <button class="radius-btn" onclick="adjustRadius(25)" title="Expand radius">+</button>
       </div>
     </div>
@@ -1076,8 +1126,8 @@
   </div>
   <div class="retro-board-cols">
     <div>FLIGHT</div>
-    <div style="text-align:right">ALT</div>
-    <div style="text-align:right">SPD</div>
+    <div style="text-align:right">ALT / FL</div>
+    <div style="text-align:right">GS</div>
     <div style="text-align:right">DIST</div>
   </div>
   <div class="retro-rows" id="retro-rows"></div>
@@ -1117,7 +1167,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.3';
+const VERSION = 'v1.4';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1924,11 +1974,11 @@ async function loadMapGeo() {
     ]);
     if (countriesRes.ok) {
       const topo = await countriesRes.json();
-      mapGeo.push({ topo, key: 'countries', color: 'rgba(40,90,140,0.7)', width: 1.0 });
+      mapGeo.push({ topo, key: 'countries', color: null, width: 1.0, isCountry: true });
     }
     if (statesRes.ok) {
       const topo = await statesRes.json();
-      mapGeo.push({ topo, key: 'states', color: 'rgba(60,140,200,0.85)', width: 1.5 });
+      mapGeo.push({ topo, key: 'states', color: null, width: 1.5, isState: true });
     }
   } catch(_) {}
 }
@@ -1940,7 +1990,7 @@ async function loadCounties() {
     const r = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json');
     if (r.ok) {
       const topo = await r.json();
-      mapGeoCounties.push({ topo, key: 'counties', color: 'rgba(40,100,160,0.55)', width: 0.6 });
+      mapGeoCounties.push({ topo, key: 'counties', color: null, width: 0.6, isCounty: true });
     }
   } catch(_) {}
 }
@@ -1979,7 +2029,11 @@ function drawMapOutlines(ctx, cx, cy, maxR) {
     const { topo, key, color, width } = layer;
     if (!topo || !topo.arcs) continue;
 
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = color || (
+      currentTheme === 'retro'
+        ? layer.isCounty ? 'rgba(255,184,48,0.25)' : layer.isCountry ? 'rgba(255,184,48,0.45)' : 'rgba(255,184,48,0.7)'
+        : layer.isCounty ? 'rgba(40,100,160,0.55)' : layer.isCountry ? 'rgba(40,90,140,0.7)' : 'rgba(60,140,200,0.85)'
+    );
     ctx.lineWidth = width;
 
     const obj = topo.objects[key];
@@ -2069,12 +2123,12 @@ function drawRadar() {
     const r = maxR * (i / rings);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.strokeStyle = i === rings ? '#1a3a5c' : '#0f2535';
+    ctx.strokeStyle = currentTheme === 'retro' ? (i === rings ? 'rgba(255,184,48,0.25)' : 'rgba(255,184,48,0.12)') : (i === rings ? '#1a3a5c' : '#0f2535');
     ctx.lineWidth = i === rings ? 1.5 : 1;
     ctx.stroke();
     // Distance label
     const nmLabel = Math.round(RADAR_RADIUS_NM * (i / rings));
-    ctx.fillStyle = '#2a4a6b';
+    ctx.fillStyle = currentTheme === 'retro' ? 'rgba(255,184,48,0.3)' : '#2a4a6b';
     ctx.font = '10px Share Tech Mono';
     ctx.fillText(nmLabel+' nm', cx + r + 4, cy - 3);
   }
@@ -2096,7 +2150,7 @@ function drawRadar() {
   }
 
   // Crosshairs
-  ctx.strokeStyle = '#0f2535';
+  ctx.strokeStyle = currentTheme === 'retro' ? 'rgba(255,184,48,0.1)' : '#0f2535';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR); ctx.stroke();
@@ -2115,8 +2169,8 @@ function drawRadar() {
   ctx.arc(cx, cy, sweepLen, sweepRad - Math.PI * 0.35, sweepRad, false);
   ctx.closePath();
   const sweepGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sweepLen);
-  sweepGrad.addColorStop(0, 'rgba(0,255,136,0.0)');
-  sweepGrad.addColorStop(1, 'rgba(0,255,136,0.08)');
+  sweepGrad.addColorStop(0, radarGreen(0.0));
+  sweepGrad.addColorStop(1, radarGreen(0.08));
   ctx.fillStyle = sweepGrad;
   ctx.fill();
   ctx.restore();
@@ -2126,7 +2180,7 @@ function drawRadar() {
   ctx.beginPath();
   ctx.moveTo(cx, cy);
   ctx.lineTo(cx + sweepLen * Math.cos(sweepRad), cy + sweepLen * Math.sin(sweepRad));
-  ctx.strokeStyle = 'rgba(0,255,136,0.7)';
+  ctx.strokeStyle = radarGreen(0.7);
   ctx.lineWidth = 1.5;
   ctx.stroke();
   ctx.restore();
@@ -2134,11 +2188,11 @@ function drawRadar() {
   // Center dot (my location)
   ctx.beginPath();
   ctx.arc(cx, cy, 4, 0, Math.PI*2);
-  ctx.fillStyle = '#00ff88';
+  ctx.fillStyle = radarGreen();
   ctx.fill();
   ctx.beginPath();
   ctx.arc(cx, cy, 8, 0, Math.PI*2);
-  ctx.strokeStyle = 'rgba(0,255,136,0.3)';
+  ctx.strokeStyle = radarGreen(0.3);
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -2213,7 +2267,7 @@ function drawRadar() {
         ctx.beginPath();
         ctx.moveTo(trail[i-1].x, trail[i-1].y);
         ctx.lineTo(trail[i].x, trail[i].y);
-        ctx.strokeStyle = isTracked ? `rgba(255,184,48,${alpha})` : `rgba(0,255,136,${alpha})`;
+        ctx.strokeStyle = isTracked ? radarAmber(alpha) : radarGreen(alpha);
         ctx.lineWidth = isTracked ? 1.5 : 1;
         ctx.stroke();
       }
@@ -2224,8 +2278,8 @@ function drawRadar() {
 
     // ATC Data Block
     if (showDataBlock.has(f.icao24)) {
-      const color = isTracked ? '#ffb830' : isSelected ? '#00ccff' : 'rgba(0,255,136,0.9)';
-      const dimColor = isTracked ? 'rgba(255,184,48,0.6)' : isSelected ? 'rgba(0,204,255,0.6)' : 'rgba(0,255,136,0.55)';
+      const color = isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen(0.9);
+      const dimColor = isTracked ? radarAmber(0.6) : isSelected ? radarBlue(0.6) : radarGreen(0.55);
 
       // Leader line from plane to data block
       const bx = px + DB_OFFSET_X, by = py + DB_OFFSET_Y + DB_H / 2;
@@ -2242,7 +2296,11 @@ function drawRadar() {
       ctx.fillText(f.callsign || f.icao24, px + DB_OFFSET_X, py + DB_OFFSET_Y + 10);
 
       // Line 2: FL + vertical indicator + speed
-      const fl = f.baro_alt ? `FL${String(Math.round(f.baro_alt / 100)).padStart(3,'0')}` : '-----';
+      const fl = f.baro_alt
+        ? f.baro_alt < 10000
+          ? `${Math.round(f.baro_alt/100)*100}ft`
+          : `FL${String(Math.round(f.baro_alt/100)).padStart(3,'0')}`
+        : '-----';
       const vr = f.vert_rate ? parseFloat(f.vert_rate) : 0;
       const arrow = vr > 100 ? '↑' : vr < -100 ? '↓' : '→';
       const spd = f.velocity ? `${f.velocity}` : '---';
@@ -2282,7 +2340,7 @@ function drawPlane(ctx, x, y, heading, isSelected, isTracked) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate((heading - 90) * Math.PI / 180); // SVG heading convention
-  const color = isTracked ? '#ffb830' : isSelected ? '#00ccff' : '#00ff88';
+  const color = isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen();
   const size = isSelected || isTracked ? 9 : 6;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -2340,7 +2398,21 @@ canvas.addEventListener('click', e => {
   if (best) selectFlight(best);
 });
 
-// ── THEME TOGGLE ──
+// ── THEME-AWARE COLORS ──
+function radarGreen(alpha = 1) {
+  return currentTheme === 'retro'
+    ? `rgba(255,184,48,${alpha})`
+    : `rgba(0,255,136,${alpha})`;
+}
+function radarBlue(alpha = 1) {
+  // Selected flight color — cyan in modern, bright amber in retro
+  return currentTheme === 'retro'
+    ? `rgba(255,220,120,${alpha})`
+    : `rgba(0,204,255,${alpha})`;
+}
+function radarAmber(alpha = 1) { return `rgba(255,184,48,${alpha})`; }
+
+
 let currentTheme = 'modern';
 
 function toggleTheme() {
@@ -2393,7 +2465,11 @@ function renderRetroBoard() {
     const isSelected = selectedFlight && selectedFlight.icao24 === f.icao24;
     const inChimeZone = (f.dist_km / 1.852) <= CHIME_RADIUS_NM;
 
-    const fl = f.baro_alt ? `FL${String(Math.round(f.baro_alt/100)).padStart(3,'0')}` : '—';
+    const fl = f.baro_alt
+      ? f.baro_alt < 10000
+        ? `${f.baro_alt.toLocaleString()}ft`
+        : `FL${String(Math.round(f.baro_alt/100)).padStart(3,'0')}`
+      : '—';
     const spd = f.velocity ? `${f.velocity}kt` : '—';
     const dist = `${kmToNm(f.dist_km)}nm`;
     const vr = f.vert_rate ? parseFloat(f.vert_rate) : 0;
