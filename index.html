@@ -924,7 +924,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.0';
+const VERSION = 'v1.1';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1707,29 +1707,36 @@ let sweepAngle = 0;
 let trailMap = {}; // icao24 → trail of canvas positions
 
 // ── MAP OUTLINES ──
-let mapGeo = null; // cached GeoJSON features
+let mapGeo = null;
+let mapGeoCounties = null; // loaded separately, only when needed
 
 async function loadMapGeo() {
   if (mapGeo !== null) return;
-  mapGeo = []; // prevent multiple fetches
+  mapGeo = [];
   try {
-    // Natural Earth 110m countries + US states — tiny files, no auth needed
     const [countriesRes, statesRes] = await Promise.all([
       fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'),
       fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json'),
     ]);
-    const topoToGeo = (topo, key) => {
-      // Minimal TopoJSON→GeoJSON without a library
-      // We only need the arcs, not full projection
-      return topo.objects[key];
-    };
     if (countriesRes.ok) {
       const topo = await countriesRes.json();
-      mapGeo.push({ topo, key: 'countries', color: 'rgba(26,58,92,0.6)', width: 0.8 });
+      mapGeo.push({ topo, key: 'countries', color: 'rgba(40,90,140,0.7)', width: 1.0 });
     }
     if (statesRes.ok) {
       const topo = await statesRes.json();
-      mapGeo.push({ topo, key: 'states', color: 'rgba(20,50,80,0.9)', width: 0.6 });
+      mapGeo.push({ topo, key: 'states', color: 'rgba(60,140,200,0.85)', width: 1.5 });
+    }
+  } catch(_) {}
+}
+
+async function loadCounties() {
+  if (mapGeoCounties !== null) return;
+  mapGeoCounties = [];
+  try {
+    const r = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json');
+    if (r.ok) {
+      const topo = await r.json();
+      mapGeoCounties.push({ topo, key: 'counties', color: 'rgba(40,100,160,0.55)', width: 0.6 });
     }
   } catch(_) {}
 }
@@ -1747,13 +1754,24 @@ function drawMapOutlines(ctx, cx, cy, maxR) {
     return [cx + dx * maxR, cy + dy * maxR];
   }
 
+  // Load counties if zoomed in enough
+  if (RADAR_RADIUS_NM <= 75 && mapGeoCounties === null) {
+    loadCounties().then(() => {}); // async, will appear on next frame
+  }
+
   ctx.save();
-  // Clip to radar circle
   ctx.beginPath();
   ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
   ctx.clip();
 
-  for (const layer of mapGeo) {
+  // Determine which layers to draw
+  const layers = [...mapGeo];
+  if (RADAR_RADIUS_NM <= 75 && mapGeoCounties && mapGeoCounties.length > 0) {
+    // Draw counties first (underneath states)
+    layers.unshift(...mapGeoCounties);
+  }
+
+  for (const layer of layers) {
     const { topo, key, color, width } = layer;
     if (!topo || !topo.arcs) continue;
 
@@ -1763,11 +1781,9 @@ function drawMapOutlines(ctx, cx, cy, maxR) {
     const obj = topo.objects[key];
     if (!obj) continue;
 
-    // Decode TopoJSON arcs
     const scale = topo.transform ? topo.transform.scale : [1, 1];
     const translate = topo.transform ? topo.transform.translate : [0, 0];
 
-    // Collect all geometry rings
     const rings = [];
     function collectArcs(geometry) {
       if (!geometry) return;
@@ -1800,7 +1816,6 @@ function drawMapOutlines(ctx, cx, cy, maxR) {
           const lat = y * scale[1] + translate[1];
           const [px, py] = latLonToCanvas(lat, lon);
 
-          // Skip if wildly off screen (>3x radius away)
           if (Math.abs(px - cx) > maxR * 3 || Math.abs(py - cy) > maxR * 3) {
             prevX = null; prevY = null; continue;
           }
