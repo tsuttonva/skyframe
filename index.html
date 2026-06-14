@@ -997,6 +997,9 @@
   <div class="status-item">
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">◑ RETRO</button>
   </div>
+  <div class="status-item">
+    <button class="theme-toggle" onclick="testAudio()" title="Test chime and voice">🔊 TEST</button>
+  </div>
   <div class="tracked-banner" id="tracked-banner">
     <span class="blink">▶</span>
     <span>TRACKING: <span id="tracked-id">—</span></span>
@@ -1007,7 +1010,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.1';
+const VERSION = 'v2.2';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1249,65 +1252,63 @@ const chimeLog = new Set(); // icao24s that have already triggered a chime this 
 
 function nmFromKm(km) { return km / 1.852; }
 
-function checkChimes(newFlights) {
-  if (!CONFIG.chimeEnabled) return;
-  newFlights.forEach(f => {
-    const nm = nmFromKm(f.dist_km);
-    if (nm <= CHIME_RADIUS_NM && !chimeLog.has(f.icao24)) {
-      chimeLog.add(f.icao24);
-      playChime();
-      if (f.is_military) {
-        playMilitaryAudio().then(played => {
-          if (!played && CONFIG.voiceEnabled) speakFlight(f, nm);
-        });
-      } else {
-        if (CONFIG.voiceEnabled) speakFlight(f, nm);
-      }
-    }
-  });
-  chimeLog.forEach(icao => {
-    const f = flights.find(x => x.icao24 === icao);
-    if (!f || nmFromKm(f.dist_km) > CHIME_RADIUS_NM * 1.2) chimeLog.delete(icao);
-  });
+// ── AUDIO ENGINE (iOS Safari compatible) ──
+// iOS requires AudioContext to be created/resumed inside a user gesture.
+// We create it once on first interaction and reuse it forever.
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
 }
 
-async function playMilitaryAudio() {
-  try {
-    const audio = new Audio('military.mp3');
-    await new Promise((resolve, reject) => {
-      audio.onended = resolve;
-      audio.onerror = reject;
-      audio.volume = 0.85;
-      audio.play().catch(reject);
-    });
-    return true;
-  } catch(e) {
-    // Fallback: speech says the actual words
-    return new Promise(resolve => {
-      if (!window.speechSynthesis) { resolve(false); return; }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance('America. Fuck yeah.');
-      u.rate = 0.75;
-      u.pitch = 0.8;
-      u.onend = () => resolve(true);
-      u.onerror = () => resolve(false);
-      window.speechSynthesis.speak(u);
-    });
-  }
+// Speech queue — iOS Web Speech works most reliably when utterances
+// are spoken one at a time without cancellation races
+const speechQueue = [];
+let speechBusy = false;
+let speechReady = false; // unlocked by first user tap
+
+function queueSpeech(text, rate = 0.92, pitch = 1.0) {
+  if (!window.speechSynthesis || !CONFIG.voiceEnabled) return;
+  speechQueue.push({ text, rate, pitch });
+  drainSpeechQueue();
 }
+
+function drainSpeechQueue() {
+  if (speechBusy || speechQueue.length === 0) return;
+  if (!speechReady) return; // wait for user gesture
+  speechBusy = true;
+  const { text, rate, pitch } = speechQueue.shift();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = rate; u.pitch = pitch; u.volume = 1.0;
+  u.onend = u.onerror = () => { speechBusy = false; drainSpeechQueue(); };
+  window.speechSynthesis.cancel(); // clear any stuck utterance
+  window.speechSynthesis.speak(u);
+}
+
+// Unlock speech on FIRST user gesture — must call speak() synchronously
+function unlockSpeech() {
+  if (speechReady) return;
+  speechReady = true;
+  if (!window.speechSynthesis) return;
+  // Speak a silent utterance synchronously to unlock iOS
+  const silent = new SpeechSynthesisUtterance(' ');
+  silent.volume = 0; silent.rate = 2;
+  window.speechSynthesis.speak(silent);
+  // Drain any queued announcements
+  setTimeout(drainSpeechQueue, 200);
+}
+document.addEventListener('touchstart', unlockSpeech, { once: true, passive: true });
+document.addEventListener('click',      unlockSpeech, { once: true });
 
 function playChime() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const vol = ctx.createGain();
-    vol.gain.setValueAtTime(CONFIG.chimeVolume * 0.4, ctx.currentTime);
-    vol.connect(ctx.destination);
-    // Double beep — ATC-style
+    const ctx = getAudioCtx();
     [[880, 0, 0.12], [1100, 0.18, 0.1]].forEach(([freq, delay, dur]) => {
       const osc = ctx.createOscillator();
+      const g = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
-      const g = ctx.createGain();
       g.gain.setValueAtTime(0, ctx.currentTime + delay);
       g.gain.linearRampToValueAtTime(CONFIG.chimeVolume, ctx.currentTime + delay + 0.01);
       g.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + dur);
@@ -1316,19 +1317,33 @@ function playChime() {
       osc.start(ctx.currentTime + delay);
       osc.stop(ctx.currentTime + delay + dur + 0.05);
     });
-  } catch(e) {}
+  } catch(e) { console.warn('Chime error:', e.message); }
+}
+
+async function playMilitaryAudio() {
+  try {
+    const audio = new Audio('military.mp3');
+    audio.volume = 0.85;
+    await audio.play();
+    await new Promise((resolve, reject) => {
+      audio.onended = resolve;
+      audio.onerror = reject;
+    });
+    return true;
+  } catch(e) {
+    // Fallback: speak the words
+    queueSpeech('America. Fuck yeah.', 0.75, 0.8);
+    return true;
+  }
 }
 
 function speakFlight(f, nm) {
-  if (!window.speechSynthesis) return;
   const nmRounded = Math.round(nm);
   const alt = f.baro_alt ? `, ${Math.round(f.baro_alt/100)*100} feet` : '';
-
   let text;
   if (f.is_military) {
     const typeName = f.aircraft_type ? lookupIcaoType(f.aircraft_type) : null;
-    const typeStr = typeName ? `, ${typeName}` : '';
-    text = `Military aircraft${typeStr}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
+    text = `Military aircraft${typeName ? ', '+typeName : ''}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
   } else {
     const airlines = {
       'UAL':'United','DAL':'Delta','AAL':'American','SWA':'Southwest',
@@ -1338,16 +1353,38 @@ function speakFlight(f, nm) {
       'RCH':'Reach','SAM':'Special Air Mission',
     };
     const cs = f.callsign.trim();
-    const prefix = cs.slice(0, 3).toUpperCase();
-    const airline = airlines[prefix] || prefix;
-    const numSpoken = cs.slice(3).split('').join(' ');
-    text = `${airline} ${numSpoken}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
+    const airline = airlines[cs.slice(0,3).toUpperCase()] || cs.slice(0,3);
+    const nums = cs.slice(3).split('').join(' ');
+    text = `${airline} ${nums}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
   }
+  queueSpeech(text);
+}
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.92;
-  utterance.pitch = 1.0;
-  window.speechSynthesis.speak(utterance);
+function checkChimes(newFlights) {
+  if (!CONFIG.chimeEnabled) return;
+  newFlights.forEach(f => {
+    const nm = nmFromKm(f.dist_km);
+    if (nm <= CHIME_RADIUS_NM && !chimeLog.has(f.icao24)) {
+      chimeLog.add(f.icao24);
+      playChime();
+      if (f.is_military) {
+        playMilitaryAudio();
+      } else if (CONFIG.voiceEnabled) {
+        speakFlight(f, nm);
+      }
+    }
+  });
+  chimeLog.forEach(icao => {
+    const f = flights.find(x => x.icao24 === icao);
+    if (!f || nmFromKm(f.dist_km) > CHIME_RADIUS_NM * 1.2) chimeLog.delete(icao);
+  });
+}
+
+// Test audio from footer button
+function testAudio() {
+  unlockSpeech();
+  playChime();
+  setTimeout(() => queueSpeech('SkyFrame audio test. Delta 1 8 8 7, 8 miles, 35000 feet.'), 400);
 }
 
 // ── CLOCK ──
@@ -2717,19 +2754,6 @@ function toggleChime() {
   document.getElementById('chime-radius-label').style.opacity = CONFIG.chimeEnabled ? '1' : '0.3';
 }
 
-// ── SPEECH SYNTHESIS UNLOCK (iOS requires user gesture) ──
-let speechUnlocked = false;
-function unlockSpeech() {
-  if (speechUnlocked || !window.speechSynthesis) return;
-  // Speak empty string to unlock — iOS requires this after a user tap
-  const u = new SpeechSynthesisUtterance('');
-  u.volume = 0;
-  window.speechSynthesis.speak(u);
-  speechUnlocked = true;
-}
-// Unlock on first tap anywhere
-document.addEventListener('touchstart', unlockSpeech, { once: true });
-document.addEventListener('click', unlockSpeech, { once: true });
 initTheme();
 getLocation();
 </script>
