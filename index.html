@@ -830,6 +830,25 @@
     white-space: nowrap;
   }
   .theme-toggle:hover { border-color: var(--amber); color: var(--amber); }
+  /* ── MILITARY BADGE ── */
+  .fi-military {
+    display: inline-block;
+    font-size: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 1px;
+    color: #060d14;
+    background: #e8c84a;
+    border-radius: 2px;
+    padding: 1px 5px;
+    margin-right: 4px;
+    vertical-align: middle;
+    font-weight: bold;
+  }
+  .fi-callsign.military { color: #e8c84a; }
+  .flight-item.military { border-left: 2px solid rgba(232,200,74,0.5); }
+  body.retro .fi-military { background: #fff8dc; color: #080600; }
+  body.retro .fi-callsign.military { color: #fff; text-shadow: 0 0 6px rgba(255,255,255,0.4); }
+
   .loc-modal {
     position: fixed; inset: 0; z-index: 1000;
     background: rgba(0,0,0,0.75);
@@ -1181,7 +1200,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.5';
+const VERSION = 'v1.7';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1430,14 +1449,44 @@ function checkChimes(newFlights) {
     if (nm <= CHIME_RADIUS_NM && !chimeLog.has(f.icao24)) {
       chimeLog.add(f.icao24);
       playChime();
-      if (CONFIG.voiceEnabled) speakFlight(f, nm);
+      if (f.is_military) {
+        playMilitaryAudio().then(played => {
+          if (!played && CONFIG.voiceEnabled) speakFlight(f, nm);
+        });
+      } else {
+        if (CONFIG.voiceEnabled) speakFlight(f, nm);
+      }
     }
   });
-  // Remove from log if they've moved beyond 1.2× chime radius (re-arm on re-entry)
   chimeLog.forEach(icao => {
     const f = flights.find(x => x.icao24 === icao);
     if (!f || nmFromKm(f.dist_km) > CHIME_RADIUS_NM * 1.2) chimeLog.delete(icao);
   });
+}
+
+async function playMilitaryAudio() {
+  try {
+    const audio = new Audio('military.mp3');
+    await new Promise((resolve, reject) => {
+      audio.onended = resolve;
+      audio.onerror = reject;
+      audio.volume = 0.85;
+      audio.play().catch(reject);
+    });
+    return true;
+  } catch(e) {
+    // Fallback: speech says the actual words
+    return new Promise(resolve => {
+      if (!window.speechSynthesis) { resolve(false); return; }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('America. Fuck yeah.');
+      u.rate = 0.75;
+      u.pitch = 0.8;
+      u.onend = () => resolve(true);
+      u.onerror = () => resolve(false);
+      window.speechSynthesis.speak(u);
+    });
+  }
 }
 
 function playChime() {
@@ -1465,23 +1514,30 @@ function playChime() {
 
 function speakFlight(f, nm) {
   if (!window.speechSynthesis) return;
-  // Format callsign for natural speech: "DAL1887" → "Delta 1887"
-  const airlines = {
-    'UAL':'United','DAL':'Delta','AAL':'American','SWA':'Southwest',
-    'SKW':'SkyWest','FFT':'Frontier','JBU':'JetBlue','ASA':'Alaska',
-    'EJA':'NetJets','WJA':'WestJet','FDX':'FedEx','UPS':'UPS',
-    'RPA':'Republic','ENY':'Envoy','PDT':'Piedmont','CPZ':'Compass',
-  };
-  const cs = f.callsign.trim();
-  const prefix = cs.slice(0, 3).toUpperCase();
-  const nums = cs.slice(3);
-  const airline = airlines[prefix] || prefix;
-  const numSpoken = nums.split('').join(' '); // "1887" → "1 8 8 7" for clarity
   const nmRounded = Math.round(nm);
   const alt = f.baro_alt ? `, ${Math.round(f.baro_alt/100)*100} feet` : '';
-  const utterance = new SpeechSynthesisUtterance(
-    `${airline} ${numSpoken}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`
-  );
+
+  let text;
+  if (f.is_military) {
+    const typeName = f.aircraft_type ? lookupIcaoType(f.aircraft_type) : null;
+    const typeStr = typeName ? `, ${typeName}` : '';
+    text = `Military aircraft${typeStr}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
+  } else {
+    const airlines = {
+      'UAL':'United','DAL':'Delta','AAL':'American','SWA':'Southwest',
+      'SKW':'SkyWest','FFT':'Frontier','JBU':'JetBlue','ASA':'Alaska',
+      'EJA':'NetJets','WJA':'WestJet','FDX':'FedEx','UPS':'UPS',
+      'RPA':'Republic','ENY':'Envoy','PDT':'Piedmont','CPZ':'Compass',
+      'RCH':'Reach','SAM':'Special Air Mission',
+    };
+    const cs = f.callsign.trim();
+    const prefix = cs.slice(0, 3).toUpperCase();
+    const airline = airlines[prefix] || prefix;
+    const numSpoken = cs.slice(3).split('').join(' ');
+    text = `${airline} ${numSpoken}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 0.92;
   utterance.pitch = 1.0;
   window.speechSynthesis.speak(utterance);
@@ -1782,7 +1838,8 @@ function parseAdsbLol(ac) {
       dist_km: haversine(myLat, myLon, a.lat, a.lon),
     }))
     .filter(f => f.dist_km <= RADIUS_KM())
-    .sort((a, b) => a.dist_km - b.dist_km);
+    .sort((a, b) => a.dist_km - b.dist_km)
+    .map(f => ({ ...f, is_military: isMilitary(f) }));
 }
 
 function setSourceStatus(level, text) {
@@ -1845,7 +1902,8 @@ function parseFlightsOpenSky(states) {
       dist_km: haversine(myLat, myLon, s[6], s[5])
     }))
     .filter(f => f.dist_km <= RADIUS_KM() && !f.on_ground)
-    .sort((a,b) => a.dist_km - b.dist_km);
+    .sort((a,b) => a.dist_km - b.dist_km)
+    .map(f => ({ ...f, is_military: isMilitary(f) }));
 }
 
 function haversine(lat1, lon1, lat2, lon2) {
@@ -1926,21 +1984,22 @@ function renderList() {
     const div = document.createElement('div');
     div.className = 'flight-item' +
       (selectedFlight && selectedFlight.icao24 === f.icao24 ? ' active' : '') +
-      (trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign) ? ' tracked' : '');
+      (trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign) ? ' tracked' : '') +
+      (f.is_military ? ' military' : '');
     const altPct = f.baro_alt ? Math.min(100, (f.baro_alt / 45000) * 100) : 0;
     const isTracked = trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign);
     const vrateStr = f.vert_rate !== null
       ? (parseInt(f.vert_rate) > 200 ? '▲' : parseInt(f.vert_rate) < -200 ? '▼' : '→')
       : '→';
-    // ICAO type lookup
     const typeCode = f.aircraft_type || null;
     const typeName = typeCode ? lookupIcaoType(typeCode) : null;
     const typeTag = typeCode
       ? `<span class="fi-type" title="${typeName || typeCode}">${typeCode}${typeName ? ' · '+typeName : ''}</span>`
       : '';
+    const milBadge = f.is_military ? '<span class="fi-military">MIL</span>' : '';
     div.innerHTML = `
       <div class="fi-top">
-        <div class="fi-callsign ${isTracked ? 'tracked' : ''}">${isTracked ? '▶ ':''} ${f.callsign}</div>
+        <div class="fi-callsign ${isTracked ? 'tracked' : ''} ${f.is_military ? 'military' : ''}">${milBadge}${isTracked ? '▶ ':''} ${f.callsign}</div>
         <div class="fi-dist">${kmToNm(f.dist_km)} nm</div>
       </div>
       <div class="fi-mid">
@@ -2500,13 +2559,21 @@ function drawRadar() {
       }
     }
 
-    // Plane icon
-    drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked);
+    // Plane icon — military gets gold
+    if (f.is_military && !isSelected && !isTracked) {
+      drawPlane(ctx, px, py, f.true_track || 0, false, false, '#e8c84a');
+    } else {
+      drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked);
+    }
 
     // ATC Data Block
     if (showDataBlock.has(f.icao24)) {
-      const color = isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen(0.9);
-      const dimColor = isTracked ? radarAmber(0.6) : isSelected ? radarBlue(0.6) : radarGreen(0.55);
+      const color = f.is_military && !isSelected && !isTracked
+        ? '#e8c84a'
+        : isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen(0.9);
+      const dimColor = f.is_military && !isSelected && !isTracked
+        ? 'rgba(232,200,74,0.6)'
+        : isTracked ? radarAmber(0.6) : isSelected ? radarBlue(0.6) : radarGreen(0.55);
 
       // Leader line from plane to data block
       const bx = px + DB_OFFSET_X, by = py + DB_OFFSET_Y + DB_H / 2;
@@ -2563,11 +2630,11 @@ function drawRadar() {
   }
 }
 
-function drawPlane(ctx, x, y, heading, isSelected, isTracked) {
+function drawPlane(ctx, x, y, heading, isSelected, isTracked, overrideColor) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate((heading - 90) * Math.PI / 180); // SVG heading convention
-  const color = isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen();
+  ctx.rotate((heading - 90) * Math.PI / 180);
+  const color = overrideColor || (isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen());
   const size = isSelected || isTracked ? 9 : 6;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -2624,6 +2691,96 @@ canvas.addEventListener('click', e => {
   });
   if (best) selectFlight(best);
 });
+
+
+// ── MILITARY AIRCRAFT DETECTION ──
+// Three methods: hex range, callsign prefix, known military type codes
+
+const MILITARY_HEX_RANGES = [
+  // US DoD blocks (FAA assigned)
+  [0xADF000, 0xAFFFFF], // US military primary block
+  [0xA00000, 0xA3FFFF], // Shared US block, heavy military presence
+  // NATO / allied
+  [0x3A0000, 0x3BFFFF], // Germany military
+  [0x3C0000, 0x3DFFFF], // Germany (Luftwaffe)
+  [0x440000, 0x447FFF], // UK military
+  [0x7C0000, 0x7FFFFF], // Australia (includes RAAF)
+];
+
+const MILITARY_CALLSIGN_PREFIXES = [
+  'RCH',   // Air Mobility Command airlift (Reach)
+  'REACH', // AMC alternate
+  'PACK',  // KC-135 tanker
+  'GHOST', // B-2 / stealth
+  'VIPER', // F-16
+  'COBRA', // Attack helo / fighter
+  'KNIFE', // Special ops
+  'HAWK',  // Various fighters
+  'EAGLE', // F-15
+  'BULLY', // F-15
+  'SAM',   // Special Air Mission (VIP/POTUS support)
+  'SPAR',  // SecDef transport
+  'EVAC',  // Medical evacuation
+  'MEDEVAC',
+  'DOOM',  // B-52
+  'BUFF',  // B-52 (Big Ugly Fat Fellow)
+  'IRON',  // Various
+  'STEEL',
+  'FURY',
+  'STORM',
+  'RAVEN', // EW/recon
+  'RIVET', // RC-135 recon (Rivet Joint)
+  'JSTARS',// E-8 ground surveillance
+  'AWACS', // E-3 Sentry
+  'JOLLY', // Combat rescue HH-60
+  'PEDRO', // Combat rescue
+  'ROCKY',
+  'TANK',  // Tanker generic
+  'ATLAS', // C-17 AMC
+  'GLOBE', // C-17 AMC
+  'BOXER',
+  'RANGER',
+  'MAGIC', // AWACS callsign
+  'TOPAZ', // Recon
+  'SPORT', // T-38 trainer
+  'GUNFIGHTER', // F-16
+];
+
+const MILITARY_TYPE_CODES = new Set([
+  'C17','C5M','C5','KC135','K35R','K35E','KC10','KDC10',
+  'B52','B2','F16','F15','F18','F18S','F22','F35','FA18',
+  'P8','EP3','RC135','E3TF','E8','E6','E4','VC25',
+  'C130','LC130','MC130','AC130','HC130',
+  'V22','MV22','CV22','CH47','CH53','UH60','HH60','MH60',
+  'AH64','OH58','UH1','H60','H47','H53',
+  'C12','U2','SR71','RQ4','MQ9','MQ1',
+  'T38','T6','T45','T1',
+  'C21','C37','C40','C32','C20',
+]);
+
+function isMilitary(f) {
+  // 1. Check ICAO hex range
+  const hexVal = parseInt(f.icao24, 16);
+  if (!isNaN(hexVal)) {
+    for (const [lo, hi] of MILITARY_HEX_RANGES) {
+      if (hexVal >= lo && hexVal <= hi) return true;
+    }
+  }
+
+  // 2. Check callsign prefix
+  const cs = (f.callsign || '').toUpperCase().trim();
+  if (cs) {
+    for (const prefix of MILITARY_CALLSIGN_PREFIXES) {
+      if (cs.startsWith(prefix)) return true;
+    }
+  }
+
+  // 3. Check aircraft type code
+  const t = (f.aircraft_type || '').toUpperCase();
+  if (t && MILITARY_TYPE_CODES.has(t)) return true;
+
+  return false;
+}
 
 // ── THEME-AWARE COLORS ──
 function radarGreen(alpha = 1) {

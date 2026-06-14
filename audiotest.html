@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyFrame Audio Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #060d14;
+    color: #cce8ff;
+    font-family: 'Courier New', monospace;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  h1 { color: #00ff88; letter-spacing: 3px; font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #4a7a9b; font-size: 11px; letter-spacing: 1px; margin-bottom: 32px; }
+
+  .section { margin-bottom: 36px; }
+  .section-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #ffb830;
+    border-bottom: 1px solid rgba(255,184,48,0.2);
+    padding-bottom: 6px;
+    margin-bottom: 16px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  .card {
+    background: #0d1e35;
+    border: 1px solid #1a3a5c;
+    border-radius: 6px;
+    padding: 16px;
+  }
+
+  .card.military {
+    border-color: rgba(232,200,74,0.4);
+    background: #0d0e10;
+  }
+
+  .card-callsign {
+    font-size: 20px;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  .card-callsign.mil { color: #e8c84a; }
+  .card-callsign.civ { color: #00ff88; }
+
+  .card-detail {
+    font-size: 10px;
+    color: #4a7a9b;
+    margin-bottom: 12px;
+    line-height: 1.8;
+  }
+
+  .mil-badge {
+    display: inline-block;
+    background: #e8c84a;
+    color: #060d14;
+    font-size: 8px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 8px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 1px solid;
+    transition: all 0.15s;
+  }
+
+  .btn-chime {
+    background: rgba(0,255,136,0.08);
+    border-color: rgba(0,255,136,0.4);
+    color: #00ff88;
+  }
+  .btn-chime:hover { background: rgba(0,255,136,0.2); }
+
+  .btn-voice {
+    background: rgba(0,204,255,0.08);
+    border-color: rgba(0,204,255,0.4);
+    color: #00ccff;
+  }
+  .btn-voice:hover { background: rgba(0,204,255,0.2); }
+
+  .btn-full {
+    background: rgba(232,200,74,0.08);
+    border-color: rgba(232,200,74,0.5);
+    color: #e8c84a;
+  }
+  .btn-full:hover { background: rgba(232,200,74,0.2); }
+
+  .btn-mil-audio {
+    background: rgba(232,200,74,0.15);
+    border-color: #e8c84a;
+    color: #e8c84a;
+    font-weight: bold;
+  }
+  .btn-mil-audio:hover { background: rgba(232,200,74,0.3); }
+
+  .log {
+    margin-top: 32px;
+    background: #050b14;
+    border: 1px solid #1a3a5c;
+    border-radius: 4px;
+    padding: 14px;
+    font-size: 11px;
+    color: #4a7a9b;
+    min-height: 80px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .log-line { margin-bottom: 4px; }
+  .log-line.ok { color: #00ff88; }
+  .log-line.mil { color: #e8c84a; }
+  .log-line.err { color: #ff4466; }
+
+  .note {
+    background: rgba(255,184,48,0.06);
+    border: 1px solid rgba(255,184,48,0.2);
+    border-radius: 4px;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: rgba(255,184,48,0.7);
+    margin-bottom: 24px;
+    line-height: 1.7;
+  }
+  .note strong { color: #ffb830; }
+</style>
+</head>
+<body>
+
+<h1>◈ SKYFRAME AUDIO TEST</h1>
+<div class="sub">Test chime and voice announcements without waiting for real aircraft</div>
+
+<div class="note">
+  <strong>HOW TO USE:</strong> Tap any button to trigger that audio event. "CHIME" plays the ATC double-beep.
+  "VOICE" speaks the flight announcement. "FULL ALERT" does both in sequence, exactly as the app would.
+  Military aircraft trigger a different announcement — and if <strong>military.mp3</strong> is in your repo, it plays that too.
+</div>
+
+<div class="section">
+  <div class="section-title">✈ CIVILIAN AIRCRAFT</div>
+  <div class="cards" id="civ-cards"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">★ MILITARY AIRCRAFT</div>
+  <div class="cards" id="mil-cards"></div>
+</div>
+
+<div class="log" id="log">
+  <div class="log-line">// Audio log — events will appear here</div>
+</div>
+
+<script>
+// ── FAKE FLIGHTS ──
+const CIV_FLIGHTS = [
+  { icao24: 'a1b2c3', callsign: 'DAL1887', aircraft_type: 'B738', baro_alt: 35000, velocity: 480, dist_km: 20, is_military: false, desc: 'Delta 737-800, 35,000ft, 20nm' },
+  { icao24: 'a2b3c4', callsign: 'UAL2341', aircraft_type: 'B789', baro_alt: 38000, velocity: 510, dist_km: 12, is_military: false, desc: 'United 787-9, 38,000ft, 12nm' },
+  { icao24: 'a3b4c5', callsign: 'SWA3301', aircraft_type: 'B737', baro_alt: 31000, velocity: 440, dist_km: 8,  is_military: false, desc: 'Southwest 737-700, 31,000ft, 8nm' },
+  { icao24: 'a4b5c6', callsign: 'JBU1044', aircraft_type: 'A320', baro_alt: 36000, velocity: 475, dist_km: 14, is_military: false, desc: 'JetBlue A320, 36,000ft, 14nm' },
+  { icao24: 'a5b6c7', callsign: 'N7834K',  aircraft_type: 'C172', baro_alt: 4500,  velocity: 120, dist_km: 6,  is_military: false, desc: 'Cessna 172, 4,500ft, 6nm (GA)' },
+  { icao24: 'a6b7c8', callsign: 'EJA552',  aircraft_type: 'C750', baro_alt: 43000, velocity: 500, dist_km: 11, is_military: false, desc: 'NetJets Citation X, 43,000ft, 11nm' },
+  { icao24: 'a7b8c9', callsign: 'FDX1234', aircraft_type: 'B763', baro_alt: 32000, velocity: 465, dist_km: 18, is_military: false, desc: 'FedEx 767-300, 32,000ft, 18nm' },
+];
+
+const MIL_FLIGHTS = [
+  { icao24: 'adf001', callsign: 'RCH345',  aircraft_type: 'C17',  baro_alt: 28000, velocity: 420, dist_km: 10, is_military: true, desc: 'Air Mobility Command C-17 Globemaster' },
+  { icao24: 'adf002', callsign: 'REACH12',  aircraft_type: 'KC135',baro_alt: 31000, velocity: 440, dist_km: 7,  is_military: true, desc: 'KC-135 Stratotanker (Tanker)' },
+  { icao24: 'adf003', callsign: 'GHOST11', aircraft_type: 'B2',   baro_alt: 40000, velocity: 520, dist_km: 9,  is_military: true, desc: 'B-2 Spirit Stealth Bomber' },
+  { icao24: 'adf004', callsign: 'VIPER21', aircraft_type: 'F16',  baro_alt: 18000, velocity: 580, dist_km: 5,  is_military: true, desc: 'F-16 Fighting Falcon' },
+  { icao24: 'adf005', callsign: 'SAM001',  aircraft_type: 'C32',  baro_alt: 39000, velocity: 490, dist_km: 15, is_military: true, desc: 'Special Air Mission (VIP transport)' },
+  { icao24: 'adf006', callsign: 'EVAC01',  aircraft_type: 'C130', baro_alt: 22000, velocity: 310, dist_km: 8,  is_military: true, desc: 'Medical Evacuation C-130' },
+];
+
+// ── AUDIO FUNCTIONS (copied from main app) ──
+const ICAO_TYPES = {
+  'B738':'Boeing 737-800','B789':'Boeing 787-9 Dreamliner','B737':'Boeing 737-700',
+  'A320':'Airbus A320','C172':'Cessna 172 Skyhawk','C750':'Cessna Citation X',
+  'B763':'Boeing 767-300','C17':'Boeing C-17 Globemaster','KC135':'Boeing KC-135 Stratotanker',
+  'B2':'Northrop Grumman B-2 Spirit','F16':'General Dynamics F-16 Fighting Falcon',
+  'C32':'Boeing C-32 (757 VIP)','C130':'Lockheed C-130 Hercules',
+};
+function lookupIcaoType(code) { return code ? ICAO_TYPES[code.toUpperCase()] || null : null; }
+
+function playChime() {
+  return new Promise(resolve => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [[880, 0, 0.12], [1100, 0.18, 0.1]].forEach(([freq, delay, dur]) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, ctx.currentTime + delay);
+        g.gain.linearRampToValueAtTime(0.6, ctx.currentTime + delay + 0.01);
+        g.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + dur);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + dur + 0.05);
+      });
+      setTimeout(resolve, 400);
+    } catch(e) { log('Chime error: ' + e.message, 'err'); resolve(); }
+  });
+}
+
+function speakFlight(f, nm) {
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { log('Speech synthesis not available', 'err'); resolve(); return; }
+    window.speechSynthesis.cancel();
+
+    const nmRounded = Math.round(nm);
+    const alt = f.baro_alt ? `, ${Math.round(f.baro_alt/100)*100} feet` : '';
+    let text;
+
+    if (f.is_military) {
+      const typeName = lookupIcaoType(f.aircraft_type);
+      const typeStr = typeName ? `, ${typeName}` : '';
+      text = `Military aircraft${typeStr}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
+    } else {
+      const airlines = {
+        'UAL':'United','DAL':'Delta','AAL':'American','SWA':'Southwest',
+        'SKW':'SkyWest','FFT':'Frontier','JBU':'JetBlue','ASA':'Alaska',
+        'EJA':'NetJets','FDX':'FedEx','UPS':'UPS',
+      };
+      const cs = f.callsign.trim();
+      const prefix = cs.slice(0,3).toUpperCase();
+      const airline = airlines[prefix] || prefix;
+      const numSpoken = cs.slice(3).split('').join(' ');
+      text = `${airline} ${numSpoken}, ${nmRounded} mile${nmRounded !== 1 ? 's' : ''}${alt}`;
+    }
+
+    log(`Speaking: "${text}"`, f.is_military ? 'mil' : 'ok');
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.92; u.pitch = 1.0;
+    u.onend = resolve;
+    u.onerror = resolve;
+    window.speechSynthesis.speak(u);
+  });
+}
+
+async function playMilitaryAudio() {
+  // Try to play military.mp3 from the repo first
+  try {
+    const audio = new Audio('military.mp3');
+    await new Promise((resolve, reject) => {
+      audio.onended = resolve;
+      audio.onerror = reject;
+      audio.volume = 0.8;
+      audio.play().catch(reject);
+    });
+    log('Played military.mp3', 'mil');
+    return true;
+  } catch(e) {
+    log('military.mp3 not found — falling back to speech', 'mil');
+    return false;
+  }
+}
+
+async function fullMilitaryAlert(f) {
+  const nm = f.dist_km / 1.852;
+  log(`--- MILITARY ALERT: ${f.callsign} ---`, 'mil');
+  await playChime();
+  const played = await playMilitaryAudio();
+  if (!played) {
+    // Fallback: speech says the words
+    await new Promise(resolve => {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('America. Fuck yeah.');
+      u.rate = 0.75; u.pitch = 0.8;
+      u.onend = resolve; u.onerror = resolve;
+      window.speechSynthesis.speak(u);
+    });
+  }
+  // Then the flight details
+  await speakFlight(f, nm);
+}
+
+// ── LOG ──
+function log(msg, type = '') {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.textContent = new Date().toISOString().slice(11,19) + 'Z  ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── RENDER CARDS ──
+function makeCard(f, container) {
+  const nm = Math.round(f.dist_km / 1.852);
+  const card = document.createElement('div');
+  card.className = 'card' + (f.is_military ? ' military' : '');
+
+  const badge = f.is_military ? '<span class="mil-badge">MIL</span>' : '';
+  const type = f.aircraft_type ? `${f.aircraft_type} · ${lookupIcaoType(f.aircraft_type) || '?'}` : '';
+
+  card.innerHTML = `
+    <div class="card-callsign ${f.is_military ? 'mil' : 'civ'}">${badge}${f.callsign}</div>
+    <div class="card-detail">
+      ${f.desc}<br>
+      ${type}
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-chime" onclick="playChime().then(()=>log('Chime played','ok'))">🔔 CHIME</button>
+      <button class="btn btn-voice" onclick="speakFlight(${JSON.stringify(f).replace(/"/g,'&quot;')}, ${nm})">🔊 VOICE</button>
+      ${f.is_military
+        ? `<button class="btn btn-mil-audio" onclick="fullMilitaryAlert(${JSON.stringify(f).replace(/"/g,'&quot;')})">★ FULL ALERT</button>`
+        : `<button class="btn btn-full" onclick="(async()=>{await playChime();await speakFlight(${JSON.stringify(f).replace(/"/g,'&quot;')},${nm});})()">▶ FULL ALERT</button>`
+      }
+    </div>
+  `;
+  container.appendChild(card);
+}
+
+CIV_FLIGHTS.forEach(f => makeCard(f, document.getElementById('civ-cards')));
+MIL_FLIGHTS.forEach(f => makeCard(f, document.getElementById('mil-cards')));
+log('Audio test ready. Tap any button to test.', 'ok');
+</script>
+</body>
+</html>
