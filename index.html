@@ -54,14 +54,44 @@
     overflow: hidden;
   }
 
+  .logo-block {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+  }
+
+  .radius-inline {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
   .logo {
     font-family: 'Share Tech Mono', monospace;
     font-size: 16px;
     color: var(--radar-green);
     letter-spacing: 2px;
     text-transform: uppercase;
-    flex-shrink: 0;
     white-space: nowrap;
+    line-height: 1;
+  }
+
+  .ver-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    color: #6a9abf;
+    letter-spacing: 1px;
+    line-height: 1;
+    padding-left: 2px;
+  }
+
+  .radius-inline {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 18px;
   }
 
   .logo span { color: var(--text-dim); }
@@ -751,31 +781,24 @@
     animation: blink 1s step-end infinite;
   }
 
-  .radius-control {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .radius-hstat { flex-shrink: 0; }
-
   .radius-btn {
     background: var(--sky-dark);
     border: 1px solid var(--sky-border);
     border-radius: 3px;
     color: var(--text-dim);
-    font-size: 14px;
+    font-size: 13px;
     font-family: 'Share Tech Mono', monospace;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: all 0.15s;
     flex-shrink: 0;
     line-height: 1;
     padding: 0;
+    vertical-align: middle;
   }
   .radius-btn:hover {
     border-color: var(--radar-green);
@@ -826,7 +849,10 @@
 </div>
 
 <header>
-  <div class="logo">◈ SKY<span>FRAME</span> <span id="ver-label" style="font-size:9px;letter-spacing:1px;color:#6a9abf;margin-left:4px;"></span></div>
+  <div class="logo-block">
+    <div class="logo">◈ SKY<span>FRAME</span></div>
+    <div id="ver-label" class="ver-label"></div>
+  </div>
   <div class="header-stats">
     <div class="hstat">
       <div class="hstat-val" id="stat-count">—</div>
@@ -840,15 +866,13 @@
       <div class="hstat-val" id="stat-fastest">—</div>
       <div class="hstat-label">Fastest kts</div>
     </div>
-    <div class="hstat radius-hstat">
-      <div class="radius-control">
-        <button class="radius-btn" onclick="adjustRadius(-25)" title="Shrink radius">−</button>
-        <div>
-          <div class="hstat-val" id="stat-radius">50</div>
-          <div class="hstat-label">NM</div>
-        </div>
-        <button class="radius-btn" onclick="adjustRadius(25)" title="Expand radius">+</button>
+    <div class="hstat">
+      <div class="hstat-val radius-inline">
+        <button class="radius-btn" onclick="adjustRadius(-25)">−</button>
+        <span id="stat-radius">50</span>
+        <button class="radius-btn" onclick="adjustRadius(25)">+</button>
       </div>
+      <div class="hstat-label">Radius nm</div>
     </div>
   </div>
   <div class="location-label" onclick="openLocModal()" title="Click to change location">
@@ -856,9 +880,9 @@
     <span id="loc-label">Acquiring…</span>
   </div>
   <div class="search-bar">
-    <input type="text" id="search-input" placeholder="Flight / tail (e.g. UAL123)" maxlength="10">
+    <input type="text" id="search-input" placeholder="Flight / tail" maxlength="10">
     <button class="search-btn" onclick="doSearch()">TRACK</button>
-    <button class="clear-btn" onclick="clearTrack()" title="Clear tracking">✕</button>
+    <button class="clear-btn" onclick="clearTrack()" title="Clear">✕</button>
   </div>
   <div class="clock" id="clock">--:--:--</div>
 </header>
@@ -963,20 +987,14 @@
   </div>
 </div>
   <div class="status-item">
-    <span>SOURCE</span>
-    <span class="status-ok" id="status-source">OpenSky Network</span>
+    <span id="status-update" style="color:var(--text-dim);font-size:10px;">—</span>
   </div>
   <div class="status-item">
-    <span>LAST UPDATE</span>
-    <span id="status-update">—</span>
-  </div>
-  <div class="status-item">
-    <span>REFRESH</span>
-    <span>30s</span>
+    <span class="status-ok" id="status-source" style="font-size:9px;color:var(--text-muted);cursor:pointer;"></span>
   </div>
   <div class="status-item">
     <button class="chime-toggle" id="chime-toggle" onclick="toggleChime()" title="Toggle proximity chime">
-      🔔 CHIME <span id="chime-state">ON</span>
+      🔔 <span id="chime-state">ON</span>
     </button>
     <span id="chime-radius-label" style="font-size:9px;color:var(--amber);margin-left:4px;">▶ &lt;15nm</span>
   </div>
@@ -993,7 +1011,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.9';
+const VERSION = 'v2.0';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1719,6 +1737,7 @@ async function init() {
   document.getElementById('status-update').textContent =
     new Date().toISOString().slice(11,19) + ' Z';
   updateRadiusStat();
+  checkChimes(flights); // check on initial load — planes may already be in zone
   render();
   startRadar();
   setInterval(refresh, REFRESH_MS);
