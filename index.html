@@ -236,6 +236,13 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .retro-board {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .panel-header {
@@ -611,7 +618,173 @@
     color: var(--amber);
   }
 
-  /* ── LOCATION MODAL ── */
+  /* ── RETRO THEME ── */
+  body.retro {
+    --radar-green:  #ffb830;
+    --radar-dim:    rgba(255,184,48,0.4);
+    --radar-ghost:  rgba(255,184,48,0.08);
+    --amber:        #ffb830;
+    --amber-dim:    rgba(255,184,48,0.4);
+    --sky-dark:     #080600;
+    --sky-panel:    #0d0a00;
+    --sky-border:   rgba(255,184,48,0.2);
+    --text-main:    #ffb830;
+    --text-dim:     rgba(255,184,48,0.6);
+    --text-muted:   rgba(255,184,48,0.3);
+    background: #080600;
+  }
+
+  body.retro header {
+    background: #0d0a00;
+    border-bottom: 1px solid rgba(255,184,48,0.25);
+  }
+
+  body.retro .logo { color: #ffb830; }
+  body.retro .hstat-val { color: #ffb830; }
+  body.retro .dot { background: #ffb830; }
+  body.retro .search-btn { color: #ffb830; border-color: rgba(255,184,48,0.4); }
+  body.retro .search-bar { border-color: rgba(255,184,48,0.2); }
+  body.retro .search-bar input { color: #ffb830; }
+  body.retro footer { border-top: 1px solid rgba(255,184,48,0.2); }
+  body.retro .chime-toggle { border-color: rgba(255,184,48,0.4); color: #ffb830; }
+  body.retro .radius-btn { border-color: rgba(255,184,48,0.3); color: rgba(255,184,48,0.6); }
+  body.retro .radius-btn:hover { border-color: #ffb830; color: #ffb830; }
+
+  /* Retro board panel */
+  .retro-board {
+    display: none;
+    flex-direction: column;
+    background: #060400;
+    border-left: 1px solid rgba(255,184,48,0.2);
+    overflow: hidden;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  body.retro .side-panel { display: none; }
+  body.retro .retro-board { display: flex; }
+
+  .retro-board-header {
+    padding: 10px 16px 8px;
+    border-bottom: 1px solid rgba(255,184,48,0.2);
+    flex-shrink: 0;
+  }
+
+  .retro-board-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: rgba(255,184,48,0.5);
+    margin-bottom: 2px;
+  }
+
+  .retro-board-location {
+    font-size: 16px;
+    color: #ffb830;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .retro-board-cols {
+    display: grid;
+    grid-template-columns: 1fr 52px 48px 44px;
+    padding: 4px 16px;
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    color: rgba(255,184,48,0.35);
+    border-bottom: 1px solid rgba(255,184,48,0.1);
+    flex-shrink: 0;
+  }
+
+  .retro-rows {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .retro-rows::-webkit-scrollbar { display: none; }
+
+  .retro-row {
+    display: grid;
+    grid-template-columns: 1fr 52px 48px 44px;
+    padding: 6px 16px;
+    border-bottom: 1px solid rgba(255,184,48,0.07);
+    cursor: pointer;
+    transition: background 0.1s;
+    align-items: center;
+  }
+
+  .retro-row:nth-child(even) { background: rgba(255,184,48,0.03); }
+  .retro-row:hover { background: rgba(255,184,48,0.08); }
+
+  .retro-row.selected {
+    background: rgba(255,184,48,0.15);
+    border-left: 2px solid #ffb830;
+  }
+
+  .retro-row.chime-zone {
+    color: #fff;
+  }
+
+  .retro-row.chime-zone .retro-cs {
+    color: #fff;
+    text-shadow: 0 0 8px rgba(255,255,255,0.6);
+  }
+
+  .retro-cs {
+    font-size: 13px;
+    color: #ffb830;
+    letter-spacing: 1px;
+  }
+
+  .retro-alt {
+    font-size: 10px;
+    color: rgba(255,184,48,0.7);
+    text-align: right;
+  }
+
+  .retro-spd {
+    font-size: 10px;
+    color: rgba(255,184,48,0.6);
+    text-align: right;
+  }
+
+  .retro-dist {
+    font-size: 10px;
+    color: rgba(255,184,48,0.5);
+    text-align: right;
+  }
+
+  .retro-vr {
+    font-size: 9px;
+    margin-left: 2px;
+  }
+
+  .retro-board-footer {
+    padding: 8px 16px;
+    border-top: 1px solid rgba(255,184,48,0.15);
+    font-size: 9px;
+    color: rgba(255,184,48,0.4);
+    letter-spacing: 1px;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Theme toggle button */
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--sky-border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .theme-toggle:hover { border-color: var(--amber); color: var(--amber); }
   .loc-modal {
     position: fixed; inset: 0; z-index: 1000;
     background: rgba(0,0,0,0.75);
@@ -895,7 +1068,24 @@
   </div>
 </aside>
 
-<footer>
+<!-- Retro departure board (shown in retro mode) -->
+<div class="retro-board" id="retro-board">
+  <div class="retro-board-header">
+    <div class="retro-board-title">◈ SKYFRAME — NEARBY TRAFFIC</div>
+    <div class="retro-board-location" id="retro-location">—</div>
+  </div>
+  <div class="retro-board-cols">
+    <div>FLIGHT</div>
+    <div style="text-align:right">ALT</div>
+    <div style="text-align:right">SPD</div>
+    <div style="text-align:right">DIST</div>
+  </div>
+  <div class="retro-rows" id="retro-rows"></div>
+  <div class="retro-board-footer">
+    <span id="retro-count">0 AIRCRAFT</span>
+    <span id="retro-update">—</span>
+  </div>
+</div>
   <div class="status-item">
     <span>SOURCE</span>
     <span class="status-ok" id="status-source">OpenSky Network</span>
@@ -914,6 +1104,9 @@
     </button>
     <span id="chime-radius-label" style="font-size:9px;color:var(--amber);margin-left:4px;">▶ &lt;15nm</span>
   </div>
+  <div class="status-item">
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">◑ RETRO</button>
+  </div>
   <div class="tracked-banner" id="tracked-banner">
     <span class="blink">▶</span>
     <span>TRACKING: <span id="tracked-id">—</span></span>
@@ -924,7 +1117,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.2';
+const VERSION = 'v1.3';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1442,6 +1635,7 @@ function updateRadiusStat() {
 function render() {
   updateStats();
   renderList();
+  renderRetroBoard();
 }
 
 function updateStats() {
@@ -1503,6 +1697,7 @@ const enrichCache = {}; // icao24 → { route, aircraft }
 // ── FLIGHT SELECTION ──
 function selectFlight(f) {
   selectedFlight = f;
+  renderRetroBoard(); // update selected row highlight in retro mode
 
   // Populate known fields immediately
   document.getElementById('dc-callsign').textContent = f.callsign;
@@ -2145,7 +2340,79 @@ canvas.addEventListener('click', e => {
   if (best) selectFlight(best);
 });
 
-// ── RADIUS CONTROL ──
+// ── THEME TOGGLE ──
+let currentTheme = 'modern';
+
+function toggleTheme() {
+  currentTheme = currentTheme === 'modern' ? 'retro' : 'modern';
+  applyTheme();
+  try { localStorage.setItem('skyframe_theme', currentTheme); } catch(_) {}
+}
+
+function applyTheme() {
+  const btn = document.getElementById('theme-toggle');
+  if (currentTheme === 'retro') {
+    document.body.classList.add('retro');
+    btn.textContent = '◑ MODERN';
+    btn.style.color = '#ffb830';
+    btn.style.borderColor = 'rgba(255,184,48,0.4)';
+    renderRetroBoard();
+  } else {
+    document.body.classList.remove('retro');
+    btn.textContent = '◑ RETRO';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+function initTheme() {
+  try {
+    const saved = localStorage.getItem('skyframe_theme');
+    if (saved) { currentTheme = saved; applyTheme(); }
+  } catch(_) {}
+}
+
+function renderRetroBoard() {
+  if (currentTheme !== 'retro') return;
+
+  // Sync location label
+  document.getElementById('retro-location').textContent =
+    document.getElementById('loc-label').textContent;
+
+  // Update count and time
+  document.getElementById('retro-count').textContent = `${flights.length} AIRCRAFT`;
+  document.getElementById('retro-update').textContent =
+    new Date().toISOString().slice(11,16) + 'Z';
+
+  const container = document.getElementById('retro-rows');
+  container.innerHTML = '';
+
+  const sorted = [...flights].sort((a, b) => a.dist_km - b.dist_km);
+
+  sorted.forEach(f => {
+    const isSelected = selectedFlight && selectedFlight.icao24 === f.icao24;
+    const inChimeZone = (f.dist_km / 1.852) <= CHIME_RADIUS_NM;
+
+    const fl = f.baro_alt ? `FL${String(Math.round(f.baro_alt/100)).padStart(3,'0')}` : '—';
+    const spd = f.velocity ? `${f.velocity}kt` : '—';
+    const dist = `${kmToNm(f.dist_km)}nm`;
+    const vr = f.vert_rate ? parseFloat(f.vert_rate) : 0;
+    const arrow = vr > 100 ? '↑' : vr < -100 ? '↓' : '';
+
+    const row = document.createElement('div');
+    row.className = `retro-row${isSelected ? ' selected' : ''}${inChimeZone ? ' chime-zone' : ''}`;
+    row.onclick = () => selectFlight(f);
+    row.innerHTML = `
+      <div class="retro-cs">${f.callsign || f.icao24}</div>
+      <div class="retro-alt">${fl}<span class="retro-vr">${arrow}</span></div>
+      <div class="retro-spd">${spd}</div>
+      <div class="retro-dist">${dist}</div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+
 function adjustRadius(deltaNm) {
   RADAR_RADIUS_NM = Math.max(25, Math.min(300, RADAR_RADIUS_NM + deltaNm));
   updateRadiusStat();
@@ -2163,6 +2430,7 @@ function toggleChime() {
 }
 
 // ── KICK OFF ──
+initTheme();
 getLocation();
 </script>
 </body>
