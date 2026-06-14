@@ -804,7 +804,9 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v0.8';
+const VERSION = 'v0.9';
+
+const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
 const CONFIG = {
   lat:   47.9213,          // Latitude  — UND Memorial Union, Grand Forks ND
@@ -1023,32 +1025,16 @@ async function tryFetch(url, options={}, timeoutMs=10000) {
   ]);
 }
 
-// ── Fetch sources in priority order, lock to first that works ──
-// NOTE: On iOS Safari, direct cross-origin fetches are blocked by tracking prevention.
-// So we try CORS proxies FIRST, then direct ADS-B, then OpenSky direct (Pi-only).
+// ── Fetch sources — Worker first, then direct fallbacks ──
 const SOURCES = [
   {
-    name: 'corsproxy→OpenSky',
-    fetch: (lat, lon, dist, margin) => {
-      const osk = OPENSKY_DIRECT(myLat, myLon, margin);
-      return tryFetch(`https://corsproxy.io/?${encodeURIComponent(osk)}`, {}, 12000);
-    },
+    name: 'SkyFrame Worker',
+    fetch: (lat, lon, dist) =>
+      tryFetch(`${WORKER_URL}/flights?lat=${lat}&lon=${lon}&dist=${dist}`, {}, 12000),
     parse: async (resp) => {
-      const wrapper = await resp.json();
-      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
-      return { flights: parseFlightsOpenSky(d.states || []) };
-    }
-  },
-  {
-    name: 'allorigins→OpenSky',
-    fetch: (lat, lon, dist, margin) => {
-      const osk = OPENSKY_DIRECT(myLat, myLon, margin);
-      return tryFetch(`https://api.allorigins.win/get?url=${encodeURIComponent(osk)}`, {}, 15000);
-    },
-    parse: async (resp) => {
-      const wrapper = await resp.json();
-      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
-      return { flights: parseFlightsOpenSky(d.states || []) };
+      const d = await resp.json();
+      if (!Array.isArray(d.ac)) throw new Error('bad shape');
+      return { flights: parseAdsbLol(d.ac) };
     }
   },
   {
@@ -1060,6 +1046,18 @@ const SOURCES = [
     name: 'ADS-B (one)',
     fetch: (lat, lon, dist) => tryFetch(`https://api.adsb.one/v2/point/${lat}/${lon}/${dist}`),
     parse: async (resp) => { const d = await resp.json(); if (!Array.isArray(d.ac)) throw new Error('bad shape'); return { flights: parseAdsbLol(d.ac) }; }
+  },
+  {
+    name: 'corsproxy→OpenSky',
+    fetch: (lat, lon, dist, margin) => {
+      const osk = OPENSKY_DIRECT(myLat, myLon, margin);
+      return tryFetch(`https://corsproxy.io/?${encodeURIComponent(osk)}`, {}, 12000);
+    },
+    parse: async (resp) => {
+      const wrapper = await resp.json();
+      const d = typeof wrapper.contents === 'string' ? JSON.parse(wrapper.contents) : wrapper;
+      return { flights: parseFlightsOpenSky(d.states || []) };
+    }
   },
   {
     name: 'OpenSky',
@@ -1363,27 +1361,24 @@ async function fetchEnrichment(f) {
 
   const result = { origin: null, dest: null, aircraft: null, registration: null };
 
-  // --- Source 1: adsb.lol /v2/icao/{hex} — gives route + aircraft type ---
+  // --- Source 1: Worker /aircraft + /route ---
   try {
-    const r = await fetchWithTimeout(`https://api.adsb.lol/v2/icao/${f.icao24}`, {}, 6000);
+    const r = await fetchWithTimeout(`${WORKER_URL}/aircraft?icao=${f.icao24}`, {}, 8000);
     if (r.ok) {
       const d = await r.json();
       const ac = d.ac && d.ac[0];
       if (ac) {
-        // Aircraft type
-        if (ac.t) result.aircraft = ac.t; // ICAO type code e.g. "B738"
+        if (ac.t) result.aircraft = ac.t;
         if (ac.desc) result.aircraft = (result.aircraft ? result.aircraft + ' — ' : '') + ac.desc;
         if (ac.r) result.registration = ac.r;
-        // Route from flight data
         if (ac.flight) {
           const cs = ac.flight.trim();
-          // Try to get route from adsb.lol route endpoint
           try {
-            const rr = await fetchWithTimeout(`https://api.adsb.lol/api/0/routeset`, {
+            const rr = await fetchWithTimeout(`${WORKER_URL}/route`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planes: [{ callsign: cs, lat: f.lat, lng: f.lon }] }),
-            }, 5000);
+            }, 6000);
             if (rr.ok) {
               const rd = await rr.json();
               if (rd && rd[0] && rd[0].airport_codes) {
@@ -1398,7 +1393,7 @@ async function fetchEnrichment(f) {
     }
   } catch(_) {}
 
-  // --- Source 2: adsbdb.com — aircraft registration/type fallback ---
+  // --- Fallback: adsbdb.com direct ---
   if (!result.aircraft || !result.registration) {
     try {
       const r = await fetchWithTimeout(`https://www.adsbdb.com/api/aircraft/${f.icao24}`, {}, 5000);

@@ -54,6 +54,31 @@
 
 <div class="summary" id="summary"></div>
 
+
+<div class="section">
+  <div class="section-title">⭐ SkyFrame Worker (Primary Source)</div>
+  <div class="test" id="test-worker-health">
+    <div class="test-name">Worker /health</div>
+    <div class="test-url">https://skyframe.tom-tsutton.workers.dev/health</div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-worker-health">PENDING</span><span class="timing" id="time-worker-health"></span></div>
+    <div class="test-detail" id="detail-worker-health">Not tested yet</div>
+  </div>
+  <div class="test" id="test-worker-flights">
+    <div class="test-name">Worker /flights — main data feed</div>
+    <div class="test-url" id="url-worker-flights"></div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-worker-flights">PENDING</span><span class="timing" id="time-worker-flights"></span></div>
+    <div class="test-detail" id="detail-worker-flights">Not tested yet</div>
+    <div class="data-preview" id="preview-worker-flights"></div>
+  </div>
+  <div class="test" id="test-worker-aircraft">
+    <div class="test-name">Worker /aircraft — enrichment</div>
+    <div class="test-url">https://skyframe.tom-tsutton.workers.dev/aircraft?icao=a835af</div>
+    <div class="test-status"><span class="badge badge-pending" id="badge-worker-aircraft">PENDING</span><span class="timing" id="time-worker-aircraft"></span></div>
+    <div class="test-detail" id="detail-worker-aircraft">Not tested yet</div>
+    <div class="data-preview" id="preview-worker-aircraft"></div>
+  </div>
+</div>
+
 <div class="section">
   <div class="section-title">ADS-B Sources (Direct)</div>
   <div class="test" id="test-adsbLol">
@@ -382,13 +407,49 @@ function buildSummary(results) {
   `;
 }
 
+
+const WORKER = 'https://skyframe.tom-tsutton.workers.dev';
+
+async function testWorker() {
+  // Health
+  const { resp: hr, ms: hms, ok: hok, error: herr } = await timedFetch(`${WORKER}/health`);
+  if (herr) { setResult('worker-health', 'err', `Load failed: ${herr}`, hms); }
+  else if (!hok) { setResult('worker-health', 'err', `HTTP ${hr.status}`, hms); }
+  else {
+    const d = await hr.json();
+    setResult('worker-health', 'ok', `✓ ${JSON.stringify(d)}`, hms);
+  }
+
+  // Flights
+  const flightUrl = `${WORKER}/flights?lat=${testLat.toFixed(4)}&lon=${testLon.toFixed(4)}&dist=150`;
+  document.getElementById('url-worker-flights').textContent = flightUrl;
+  const { resp: fr, ms: fms, ok: fok, error: ferr } = await timedFetch(flightUrl, {}, 12000);
+  if (ferr) { setResult('worker-flights', 'err', `Load failed: ${ferr}`, fms); }
+  else if (!fok) { setResult('worker-flights', 'err', `HTTP ${fr.status}`, fms); }
+  else {
+    const d = await fr.json();
+    const count = Array.isArray(d.ac) ? d.ac.length : '?';
+    setResult('worker-flights', 'ok', `✓ source=${d.source} · ${count} aircraft`, fms, JSON.stringify(d.ac?.[0]).slice(0,200));
+  }
+
+  // Aircraft enrichment
+  const { resp: ar, ms: ams, ok: aok, error: aerr } = await timedFetch(`${WORKER}/aircraft?icao=a835af`, {}, 8000);
+  if (aerr) { setResult('worker-aircraft', 'err', `Load failed: ${aerr}`, ams); }
+  else if (!aok) { setResult('worker-aircraft', 'err', `HTTP ${ar.status}`, ams); }
+  else {
+    const d = await ar.json();
+    const ac = d.ac?.[0];
+    setResult('worker-aircraft', 'ok', `✓ type=${ac?.t||'?'} reg=${ac?.r||'?'}`, ams, JSON.stringify(ac).slice(0,200));
+  }
+}
+
 async function runAll() {
   const btn = document.getElementById('run-btn');
   btn.disabled = true;
   btn.textContent = '⏳ RUNNING...';
 
   // Reset all to pending
-  ['adsbLol','adsbOne','opensky','proxy1','proxy2','geo','geocode','enrich','route','adsbdb','topo1','topo2']
+  ['worker-health','worker-flights','worker-aircraft','adsbLol','adsbOne','opensky','proxy1','proxy2','geo','geocode','enrich','route','adsbdb','topo1','topo2']
     .forEach(id => {
       const b = document.getElementById('badge-'+id);
       if (b) { b.className = 'badge badge-pending'; b.textContent = 'TESTING'; }
@@ -409,6 +470,7 @@ async function runAll() {
 
   // Run all others in parallel
   await Promise.all([
+    testWorker(),
     testAdsbLol(),
     testAdsbOne(),
     testOpenSky(),
@@ -419,7 +481,7 @@ async function runAll() {
     testTopo(),
   ]);
 
-  const results = ['adsbLol','adsbOne','opensky','proxy1','proxy2','geo','geocode','enrich','route','adsbdb','topo1','topo2']
+  const results = ['worker-health','worker-flights','worker-aircraft','adsbLol','adsbOne','opensky','proxy1','proxy2','geo','geocode','enrich','route','adsbdb','topo1','topo2']
     .map(id => document.getElementById('badge-'+id)?.textContent?.toLowerCase() || 'err');
   buildSummary(results);
 
