@@ -787,11 +787,11 @@
     </div>
     <div class="hstat" onclick="selectStatFlight('highest')" style="cursor:pointer" title="Click to select highest flight">
       <div class="hstat-val" id="stat-highest">—</div>
-      <div class="hstat-label">Highest ft ▲</div>
+      <div class="hstat-label">Highest ft</div>
     </div>
     <div class="hstat" onclick="selectStatFlight('fastest')" style="cursor:pointer" title="Click to select fastest flight">
       <div class="hstat-val" id="stat-fastest">—</div>
-      <div class="hstat-label">Fastest kts ▶</div>
+      <div class="hstat-label">Fastest kts</div>
     </div>
     <div class="hstat">
       <div class="hstat-val" id="stat-radius">150</div>
@@ -924,7 +924,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v1.1';
+const VERSION = 'v1.2';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1089,7 +1089,14 @@ async function resolveLocation() {
       const results = await r.json();
       if (results && results.length > 0) {
         const { lat, lon, display_name } = results[0];
-        const shortName = display_name.split(',').slice(0,2).join(',').trim();
+        // Build clean city, state label from Nominatim result
+        const addr = results[0].address || {};
+        const city = addr.city || addr.town || addr.village || addr.county || display_name.split(',')[0].trim();
+        const state = addr.state_code || addr.state || '';
+        const country = addr.country_code?.toUpperCase();
+        const shortName = country === 'US'
+          ? `${city}${state ? ', '+state : ''}`
+          : `${city}${state ? ', '+state : ''}${country ? ', '+country : ''}`;
         await applyLocation(parseFloat(lat), parseFloat(lon), shortName); return;
       }
     }
@@ -1128,7 +1135,8 @@ function useGeoLocation() {
         const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, { headers: { 'Accept-Language': 'en' } });
         if (r.ok) {
           const d = await r.json();
-          const city = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+          const rawCity = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+          const city = rawCity.replace(/^(Village of |Town of |City of |Township of )/i, '');
           const state = d.address?.state_code || '';
           const label = city ? `${city}${state ? ', '+state : ''}` : `${lat.toFixed(3)}°N`;
           await applyLocation(lat, lon, label); return;
@@ -1168,7 +1176,8 @@ function getLocation() {
           const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${myLat}&lon=${myLon}&format=json`, { headers: { 'Accept-Language': 'en' } });
           if (r.ok) {
             const d = await r.json();
-            const city = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+            const rawCity = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+            const city = rawCity.replace(/^(Village of |Town of |City of |Township of )/i, '');
             const state = d.address?.state_code || '';
             const label = city ? `${city}${state ? ', '+state : ''}` : `${myLat.toFixed(3)}°N`;
             document.getElementById('loc-label').textContent = label;
@@ -1942,24 +1951,66 @@ function drawRadar() {
   const latRange = RADIUS_KM() / 111;
   const lonRange = RADIUS_KM() / (111 * Math.cos(myLat * Math.PI / 180));
 
+  // First pass — compute canvas positions for all flights
+  const flightPositions = [];
   flights.forEach(f => {
     const dx = (f.lon - myLon) / lonRange;
     const dy = -(f.lat - myLat) / latRange;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist > 1) return;
+    if (Math.sqrt(dx*dx + dy*dy) > 1) return;
+    flightPositions.push({ f, px: cx + dx * maxR, py: cy + dy * maxR });
+  });
 
-    const px = cx + dx * maxR;
-    const py = cy + dy * maxR;
+  // Second pass — determine which flights get data blocks (collision detection)
+  // Data block is ~72px wide x 28px tall, offset 14px right of plane icon
+  const DB_W = 76, DB_H = 30, DB_OFFSET_X = 13, DB_OFFSET_Y = -6;
+  const placedBlocks = []; // {x1,y1,x2,y2}
 
+  function blockRect(px, py) {
+    return { x1: px + DB_OFFSET_X, y1: py + DB_OFFSET_Y, x2: px + DB_OFFSET_X + DB_W, y2: py + DB_OFFSET_Y + DB_H };
+  }
+
+  function overlaps(a, b) {
+    return !(a.x2 + 4 < b.x1 || b.x2 + 4 < a.x1 || a.y2 + 4 < b.y1 || b.y2 + 4 < a.y1);
+  }
+
+  // Sort by distance from center — inner planes get data blocks first
+  const sorted = [...flightPositions].sort((a, b) => {
+    const da = Math.pow(a.px - cx, 2) + Math.pow(a.py - cy, 2);
+    const db = Math.pow(b.px - cx, 2) + Math.pow(b.py - cy, 2);
+    return da - db;
+  });
+
+  const showDataBlock = new Set();
+  for (const fp of sorted) {
+    const isSelected = selectedFlight && selectedFlight.icao24 === fp.f.icao24;
+    const isTracked = trackedCallsign && (fp.f.callsign === trackedCallsign || fp.f.icao24 === trackedCallsign);
+    // Selected/tracked always get a block
+    if (isSelected || isTracked) { showDataBlock.add(fp.f.icao24); continue; }
+    // Only show data blocks when radius <= 100nm (not too crowded)
+    if (RADAR_RADIUS_NM > 100) continue;
+    const rect = blockRect(fp.px, fp.py);
+    // Check against all placed blocks and all plane positions (don't block plane icons)
+    const planeConflict = flightPositions.some(other =>
+      other.f.icao24 !== fp.f.icao24 &&
+      Math.abs(other.px - (rect.x1 + DB_W/2)) < 20 &&
+      Math.abs(other.py - (rect.y1 + DB_H/2)) < 20
+    );
+    const blockConflict = placedBlocks.some(b => overlaps(rect, b));
+    if (!planeConflict && !blockConflict) {
+      showDataBlock.add(fp.f.icao24);
+      placedBlocks.push(rect);
+    }
+  }
+
+  // Third pass — draw trails, planes, and data blocks
+  flightPositions.forEach(({ f, px, py }) => {
     const isSelected = selectedFlight && selectedFlight.icao24 === f.icao24;
     const isTracked = trackedCallsign && (f.callsign === trackedCallsign || f.icao24 === trackedCallsign);
 
-    // Store trail
+    // Trail
     if (!trailMap[f.icao24]) trailMap[f.icao24] = [];
     trailMap[f.icao24].push({x: px, y: py});
     if (trailMap[f.icao24].length > 12) trailMap[f.icao24].shift();
-
-    // Draw trail
     const trail = trailMap[f.icao24];
     if (trail.length > 1) {
       for (let i = 1; i < trail.length; i++) {
@@ -1973,14 +2024,36 @@ function drawRadar() {
       }
     }
 
-    // Draw plane icon
+    // Plane icon
     drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked);
 
-    // Callsign label
-    if (isSelected || isTracked) {
-      ctx.font = isTracked ? 'bold 11px Share Tech Mono' : '10px Share Tech Mono';
-      ctx.fillStyle = isTracked ? '#ffb830' : '#00ccff';
-      ctx.fillText(f.callsign, px + 12, py - 6);
+    // ATC Data Block
+    if (showDataBlock.has(f.icao24)) {
+      const color = isTracked ? '#ffb830' : isSelected ? '#00ccff' : 'rgba(0,255,136,0.9)';
+      const dimColor = isTracked ? 'rgba(255,184,48,0.6)' : isSelected ? 'rgba(0,204,255,0.6)' : 'rgba(0,255,136,0.55)';
+
+      // Leader line from plane to data block
+      const bx = px + DB_OFFSET_X, by = py + DB_OFFSET_Y + DB_H / 2;
+      ctx.beginPath();
+      ctx.moveTo(px + 7, py);
+      ctx.lineTo(bx, by);
+      ctx.strokeStyle = dimColor;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Line 1: callsign
+      ctx.font = 'bold 10px Share Tech Mono';
+      ctx.fillStyle = color;
+      ctx.fillText(f.callsign || f.icao24, px + DB_OFFSET_X, py + DB_OFFSET_Y + 10);
+
+      // Line 2: FL + vertical indicator + speed
+      const fl = f.baro_alt ? `FL${String(Math.round(f.baro_alt / 100)).padStart(3,'0')}` : '-----';
+      const vr = f.vert_rate ? parseFloat(f.vert_rate) : 0;
+      const arrow = vr > 100 ? '↑' : vr < -100 ? '↓' : '→';
+      const spd = f.velocity ? `${f.velocity}` : '---';
+      ctx.font = '9px Share Tech Mono';
+      ctx.fillStyle = dimColor;
+      ctx.fillText(`${fl}${arrow} ${spd}kt`, px + DB_OFFSET_X, py + DB_OFFSET_Y + 22);
     }
   });
 
