@@ -611,7 +611,110 @@
     color: var(--amber);
   }
 
-  .dc-loading {
+  /* ── LOCATION MODAL ── */
+  .loc-modal {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.75);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .loc-modal-box {
+    background: #0d1e35;
+    border: 1px solid var(--radar-dim);
+    border-radius: 8px;
+    padding: 28px 32px;
+    width: min(480px, 92vw);
+    box-shadow: 0 0 40px rgba(0,255,136,0.1);
+  }
+
+  .loc-modal-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    color: var(--radar-green);
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+  }
+
+  .loc-modal-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+  }
+
+  .loc-input {
+    width: 100%;
+    background: var(--sky-dark);
+    border: 1px solid var(--sky-border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    padding: 12px 14px;
+    outline: none;
+    margin-bottom: 16px;
+    transition: border-color 0.15s;
+  }
+
+  .loc-input:focus { border-color: var(--radar-green); }
+  .loc-input::placeholder { color: var(--text-muted); font-size: 12px; }
+
+  .loc-modal-btns {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .loc-btn-primary {
+    background: var(--radar-ghost);
+    border: 1px solid var(--radar-green);
+    border-radius: 4px;
+    color: var(--radar-green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 10px 18px;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex: 1;
+  }
+  .loc-btn-primary:hover { background: var(--radar-dim); color: var(--sky-dark); }
+
+  .loc-btn-geo {
+    background: none;
+    border: 1px solid var(--sky-border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .loc-btn-geo:hover { border-color: var(--amber); color: var(--amber); }
+
+  .loc-btn-cancel {
+    background: none;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .loc-btn-cancel:hover { border-color: var(--danger); color: var(--danger); }
+
+  .loc-modal-status {
+    margin-top: 14px;
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 16px;
+    letter-spacing: 1px;
+  }
     font-family: 'Share Tech Mono', monospace;
     font-size: 10px;
     color: var(--text-muted);
@@ -653,6 +756,23 @@
 </head>
 <body>
 
+<!-- Location Settings Modal -->
+<div id="loc-modal" class="loc-modal" style="display:none">
+  <div class="loc-modal-box">
+    <div class="loc-modal-title">◈ SET LOCATION</div>
+    <div class="loc-modal-sub">Enter any address, city, zip, or lat/lon</div>
+    <input id="loc-input" class="loc-input" type="text"
+      placeholder="e.g.  Bealeton VA  ·  22712  ·  38.54,-77.76"
+      onkeydown="if(event.key==='Enter') resolveLocation()" />
+    <div class="loc-modal-btns">
+      <button class="loc-btn-primary" onclick="resolveLocation()">◈ RESOLVE &amp; SET</button>
+      <button class="loc-btn-geo" onclick="useGeoLocation()">⊕ USE MY GPS</button>
+      <button class="loc-btn-cancel" id="loc-cancel-btn" onclick="closeLocModal()">✕ CANCEL</button>
+    </div>
+    <div id="loc-modal-status" class="loc-modal-status"></div>
+  </div>
+</div>
+
 <div id="loading">
   <div class="load-logo">◈ SKYFRAME</div>
   <div class="load-text">ACQUIRING LOCATION...</div>
@@ -682,7 +802,7 @@
       </div>
     </div>
   </div>
-  <div class="location-label" onclick="showFullLocation()">
+  <div class="location-label" onclick="openLocModal()" title="Click to change location">
     <div class="dot"></div>
     <span id="loc-label">Acquiring…</span>
   </div>
@@ -804,7 +924,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v0.9';
+const VERSION = 'v1.0';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -925,66 +1045,147 @@ updateClock();
 // Set version display
 document.getElementById('ver-label').textContent = VERSION;
 
-// ── GEO — tries browser geolocation first, falls back to CONFIG coords ──
-// CONFIG.lat/lon are used as fallback (Pi with no GPS, or user denies location)
-// CONFIG.label is only shown when falling back to CONFIG coords
-function getLocation() {
-  setLoadText('ACQUIRING LOCATION...');
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        myLat = pos.coords.latitude;
-        myLon = pos.coords.longitude;
-        // Show coords immediately, then replace with city/state
-        document.getElementById('loc-label').textContent =
-          `${myLat.toFixed(2)}°N  ${Math.abs(myLon).toFixed(2)}°W`;
-        reverseGeocode(myLat, myLon);
-        init();
-      },
-      (err) => {
-        console.warn('Geolocation failed:', err.message);
-        useConfigLocation();
-      },
-      { timeout: 8000, enableHighAccuracy: true }
+// ── LOCATION MODAL ──
+let locationSet = false;
+
+function openLocModal() {
+  document.getElementById('loc-modal').style.display = 'flex';
+  document.getElementById('loc-cancel-btn').style.display = locationSet ? '' : 'none';
+  document.getElementById('loc-modal-status').textContent = '';
+  document.getElementById('loc-input').value = '';
+  setTimeout(() => document.getElementById('loc-input').focus(), 100);
+}
+
+function closeLocModal() {
+  document.getElementById('loc-modal').style.display = 'none';
+}
+
+function setLocStatus(msg, color) {
+  const el = document.getElementById('loc-modal-status');
+  el.textContent = msg;
+  el.style.color = color || 'var(--text-dim)';
+}
+
+async function resolveLocation() {
+  const query = document.getElementById('loc-input').value.trim();
+  if (!query) return;
+  setLocStatus('Resolving…', 'var(--text-dim)');
+  // Check if lat,lon
+  const coordMatch = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]), lon = parseFloat(coordMatch[2]);
+    if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      await applyLocation(lat, lon, query); return;
+    }
+  }
+  // Geocode
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'en' } }
     );
-  } else {
-    useConfigLocation();
+    if (r.ok) {
+      const results = await r.json();
+      if (results && results.length > 0) {
+        const { lat, lon, display_name } = results[0];
+        const shortName = display_name.split(',').slice(0,2).join(',').trim();
+        await applyLocation(parseFloat(lat), parseFloat(lon), shortName); return;
+      }
+    }
+    setLocStatus('Location not found. Try a different search.', 'var(--danger)');
+  } catch(e) {
+    setLocStatus('Geocoding failed. Check connection.', 'var(--danger)');
   }
 }
 
-function useConfigLocation() {
-  myLat = CONFIG.lat;
-  myLon = CONFIG.lon;
-  document.getElementById('loc-label').textContent = CONFIG.label;
-  init();
-}
-
-function showFullLocation() {
-  const label = document.getElementById('loc-label').textContent;
-  const coords = myLat ? `${myLat.toFixed(4)}°N, ${Math.abs(myLon).toFixed(4)}°W` : '';
-  alert(`Location: ${label}\n${coords}`);
-}
-
-async function reverseGeocode(lat, lon) {
-  document.getElementById('loc-label').textContent = `${lat.toFixed(3)}°  ${lon.toFixed(3)}°`;
+async function applyLocation(lat, lon, label) {
+  myLat = lat; myLon = lon;
+  setLocStatus(`✓ Set to ${label}`, 'var(--radar-green)');
+  document.getElementById('loc-label').textContent = label;
   try {
-    const r = await fetchWithTimeout(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-      { headers: { 'Accept-Language': 'en' } },
-      5000
-    );
-    if (r.ok) {
-      const d = await r.json();
-      const city = d.address.city || d.address.town || d.address.village || d.address.county || '';
-      const state = d.address.state_code || d.address.state || '';
-      const country = d.address.country_code?.toUpperCase();
-      const label = country === 'US'
-        ? `${city}${city && state ? ', ' : ''}${state}`
-        : `${city}${city ? ', ' : ''}${country}`;
-      if (label.trim()) document.getElementById('loc-label').textContent = label;
+    localStorage.setItem('skyframe_lat', lat);
+    localStorage.setItem('skyframe_lon', lon);
+    localStorage.setItem('skyframe_label', label);
+  } catch(_) {}
+  locationSet = true;
+  setTimeout(() => {
+    closeLocModal();
+    chimeLog.clear(); workingSource = null;
+    if (typeof flights !== 'undefined' && flights.length >= 0) refresh();
+    else init();
+  }, 700);
+}
+
+function useGeoLocation() {
+  setLocStatus('Requesting GPS…', 'var(--text-dim)');
+  if (!navigator.geolocation) { setLocStatus('GPS not available.', 'var(--danger)'); return; }
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      setLocStatus('Got GPS fix, resolving city…', 'var(--radar-green)');
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, { headers: { 'Accept-Language': 'en' } });
+        if (r.ok) {
+          const d = await r.json();
+          const city = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+          const state = d.address?.state_code || '';
+          const label = city ? `${city}${state ? ', '+state : ''}` : `${lat.toFixed(3)}°N`;
+          await applyLocation(lat, lon, label); return;
+        }
+      } catch(_) {}
+      await applyLocation(lat, lon, `${lat.toFixed(3)}°N ${Math.abs(lon).toFixed(3)}°W`);
+    },
+    err => setLocStatus(`GPS failed: ${err.message}`, 'var(--danger)'),
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+}
+
+// ── GEO INIT — saved location → GPS → modal ──
+function getLocation() {
+  // 1. Saved location in localStorage
+  try {
+    const savedLat = localStorage.getItem('skyframe_lat');
+    const savedLon = localStorage.getItem('skyframe_lon');
+    const savedLabel = localStorage.getItem('skyframe_label');
+    if (savedLat && savedLon) {
+      myLat = parseFloat(savedLat); myLon = parseFloat(savedLon);
+      document.getElementById('loc-label').textContent = savedLabel || `${myLat.toFixed(3)}°`;
+      locationSet = true;
+      init(); return;
     }
   } catch(_) {}
+
+  // 2. Try GPS
+  if (navigator.geolocation) {
+    setLoadText('ACQUIRING LOCATION…');
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        myLat = pos.coords.latitude; myLon = pos.coords.longitude;
+        document.getElementById('loc-label').textContent = `${myLat.toFixed(3)}°N`;
+        locationSet = true;
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${myLat}&lon=${myLon}&format=json`, { headers: { 'Accept-Language': 'en' } });
+          if (r.ok) {
+            const d = await r.json();
+            const city = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+            const state = d.address?.state_code || '';
+            const label = city ? `${city}${state ? ', '+state : ''}` : `${myLat.toFixed(3)}°N`;
+            document.getElementById('loc-label').textContent = label;
+            try { localStorage.setItem('skyframe_lat', myLat); localStorage.setItem('skyframe_lon', myLon); localStorage.setItem('skyframe_label', label); } catch(_) {}
+          }
+        } catch(_) {}
+        init();
+      },
+      () => { openLocModal(); setLocStatus('GPS unavailable — enter a location to get started.', 'var(--amber)'); },
+      { timeout: 6000, enableHighAccuracy: true }
+    );
+  } else {
+    openLocModal();
+    setLocStatus('Enter a location to get started.', 'var(--amber)');
+  }
 }
+
+function showFullLocation() { openLocModal(); }
 
 function setLoadText(t) {
   const el = document.querySelector('.load-text');
