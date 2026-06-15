@@ -1018,7 +1018,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.7';
+const VERSION = 'v2.9';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1254,6 +1254,7 @@ try {
 
 const REFRESH_MS = 30000;
 let appInitialized = false;
+let refreshTimer = null;
 
 // Timeout via Promise.race — no AbortController, works in all Safari versions
 function fetchWithTimeout(url, options = {}, ms = 8000) {
@@ -1486,12 +1487,23 @@ async function applyLocation(lat, lon, label) {
     localStorage.setItem('skyframe_label', label);
   } catch(_) {}
   locationSet = true;
-  setTimeout(() => {
+  setTimeout(async () => {
     closeLocModal();
-    chimeLog.clear(); workingSource = null;
-    if (locationSet && appInitialized) refresh();
-    else init();
-  }, 700);
+    // Reset everything for the new location
+    chimeLog.clear();
+    workingSource = null;
+    lastGoodFlights = []; // clear stale data from old location
+    enrichCache && Object.keys(enrichCache).forEach(k => delete enrichCache[k]);
+    if (locationSet && appInitialized) {
+      // Reset refresh timer so next auto-refresh is 30s from now
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      setSourceStatus('ok', 'Fetching new location…');
+      await refresh();
+      refreshTimer = setInterval(refresh, REFRESH_MS);
+    } else {
+      init();
+    }
+  }, 500); // shorter delay — get data faster
 }
 
 function useGeoLocation() {
@@ -1803,7 +1815,7 @@ async function init() {
   checkChimes(flights); // check on initial load — planes may already be in zone
   render();
   startRadar();
-  setInterval(refresh, REFRESH_MS);
+  refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
 async function refresh() {
@@ -1951,7 +1963,7 @@ function setRouteLoading() {
   document.getElementById('dc-origin-name').textContent = '';
   document.getElementById('dc-dest-code').textContent = '…';
   document.getElementById('dc-dest-name').textContent = '';
-  document.getElementById('dc-aircraft').innerHTML = '<span class="dc-loading">FETCHING...</span>';
+  // Don't reset aircraft here — local lookup already populated it
 }
 
 function applyEnrichment(data) {
@@ -1970,20 +1982,24 @@ function applyEnrichment(data) {
     document.getElementById('dc-dest-code').textContent = '—';
     document.getElementById('dc-dest-name').textContent = 'Unknown';
   }
-  // Aircraft
-  document.getElementById('dc-aircraft').textContent = data.aircraft || '—';
-  // Registration
+  // Aircraft — only update if enrichment found something
+  if (data.aircraft) {
+    document.getElementById('dc-aircraft').textContent = data.aircraft;
+    document.getElementById('dc-aircraft').style.color = 'var(--amber)';
+  }
+  // else keep whatever local lookup already set
   if (data.registration) {
     const cur = document.getElementById('dc-icao').textContent;
     if (!cur.includes('/')) {
       document.getElementById('dc-icao').textContent = data.registration + ' / ' + cur;
     }
   }
-  // Status (FlightAware — delayed, diverted, etc.)
+  // Status (delayed, diverted, etc.)
   if (data.status) {
-    document.getElementById('dc-aircraft').textContent =
-      (data.aircraft || '—') + `  ⚠ ${data.status}`;
-    document.getElementById('dc-aircraft').style.color = 'var(--amber)';
+    const acEl = document.getElementById('dc-aircraft');
+    const current = acEl.textContent;
+    acEl.textContent = current + `  ⚠ ${data.status}`;
+    acEl.style.color = 'var(--amber)';
   }
 }
 
@@ -2003,38 +2019,42 @@ async function fetchEnrichment(f) {
       const d = await r.json();
       const ac = d.ac && d.ac[0];
       if (ac) {
-        if (ac.t) result.aircraft = ac.t;
-        if (ac.desc) result.aircraft = (result.aircraft ? result.aircraft + ' — ' : '') + ac.desc;
+        // Build aircraft string: prefer full desc, fall back to type code
+        if (ac.desc && ac.t) result.aircraft = `${ac.t} — ${ac.desc}`;
+        else if (ac.desc) result.aircraft = ac.desc;
+        else if (ac.t) result.aircraft = `${ac.t} — ${lookupIcaoType(ac.t) || ac.t}`;
         if (ac.r) result.registration = ac.r;
-        if (ac.flight) {
-          const cs = ac.flight.trim();
-          try {
-            const rr = await fetchWithTimeout(`${WORKER_URL}/route`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ planes: [{ callsign: cs, lat: f.lat, lng: f.lon }] }),
-            }, 8000);
-            if (rr.ok) {
-              const rd = await rr.json();
-              // FlightAware format (from Worker v2)
-              if (rd.source === 'flightaware' && rd.origin) {
-                result.origin = { iata: rd.origin.iata, name: rd.origin.name || rd.origin.iata, city: rd.origin.city };
-                result.dest   = { iata: rd.destination?.iata, name: rd.destination?.name || rd.destination?.iata, city: rd.destination?.city };
-                if (rd.status && rd.status !== 'En Route') result.status = rd.status;
-                if (rd.departure_delay > 300) result.status = `Delayed ${Math.round(rd.departure_delay/60)}min`;
-              }
-              // adsb.lol routeset format (array with airport_codes)
-              else if (Array.isArray(rd) && rd[0]?.airport_codes) {
-                const parts = rd[0].airport_codes.split('-');
-                if (parts[0]) result.origin = { iata: parts[0], name: rd[0].originIata || parts[0] };
-                if (parts[1]) result.dest   = { iata: parts[1], name: rd[0].destinationIata || parts[1] };
-              }
-            }
-          } catch(_) {}
-        }
       }
     }
   } catch(_) {}
+
+  // --- Always try route lookup using callsign we already have ---
+  const cs = (f.callsign || '').trim();
+  if (cs && cs.length > 2) {
+    try {
+      const rr = await fetchWithTimeout(`${WORKER_URL}/route`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planes: [{ callsign: cs, lat: f.lat, lng: f.lon }] }),
+      }, 10000);
+      if (rr.ok) {
+        const rd = await rr.json();
+        // FlightAware format
+        if (rd.source === 'flightaware' && rd.origin) {
+          result.origin = { iata: rd.origin.iata, name: rd.origin.name || rd.origin.iata, city: rd.origin.city };
+          result.dest   = { iata: rd.destination?.iata, name: rd.destination?.name || rd.destination?.iata, city: rd.destination?.city };
+          if (rd.status && rd.status !== 'En Route') result.status = rd.status;
+          if (rd.departure_delay > 300) result.status = `Delayed ${Math.round(rd.departure_delay/60)}min`;
+        }
+        // adsb.lol routeset format
+        else if (Array.isArray(rd) && rd[0]?.airport_codes) {
+          const parts = rd[0].airport_codes.split('-');
+          if (parts[0]) result.origin = { iata: parts[0], name: rd[0].originIata || parts[0] };
+          if (parts[1]) result.dest   = { iata: parts[1], name: rd[0].destinationIata || parts[1] };
+        }
+      }
+    } catch(_) {}
+  }
 
   // --- Fallback: adsbdb.com direct ---
   if (!result.aircraft || !result.registration) {
