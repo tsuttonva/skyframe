@@ -1018,7 +1018,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.6';
+const VERSION = 'v2.7';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -2533,7 +2533,7 @@ function drawRadar() {
 function drawPlane(ctx, x, y, heading, isSelected, isTracked, overrideColor) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate((heading - 90) * Math.PI / 180);
+  ctx.rotate(heading * Math.PI / 180);
   const color = overrideColor || (isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen());
   const size = isSelected || isTracked ? 9 : 6;
   ctx.strokeStyle = color;
