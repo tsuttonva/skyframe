@@ -1010,7 +1010,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.3';
+const VERSION = 'v2.4';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1631,6 +1631,8 @@ const SOURCES = [
   },
 ];
 
+let lastGoodFlights = []; // keep last known real data
+
 async function fetchFlights() {
   const dist = Math.ceil(RADAR_RADIUS_NM);
   const lat = myLat.toFixed(4);
@@ -1638,7 +1640,7 @@ async function fetchFlights() {
   const margin = Math.max(2.5, RADIUS_KM() / 111);
   lastFetchErrors = [];
 
-  // If a source worked before, try it first
+  // Try working source first, then all others
   const ordered = workingSource
     ? [SOURCES.find(s => s.name === workingSource), ...SOURCES.filter(s => s.name !== workingSource)].filter(Boolean)
     : SOURCES;
@@ -1648,13 +1650,25 @@ async function fetchFlights() {
       const resp = await source.fetch(lat, lon, dist, margin);
       if (!resp.ok) { lastFetchErrors.push(`${source.name}: HTTP ${resp.status}`); continue; }
       const { flights } = await source.parse(resp);
-      workingSource = source.name; // lock to this source
+      // Only accept if we got a plausible result (at least 0 is ok, but not suspiciously low vs last known)
+      if (lastGoodFlights.length > 10 && flights.length === 0) {
+        lastFetchErrors.push(`${source.name}: returned 0 flights (suspicious, skipping)`);
+        continue;
+      }
+      workingSource = source.name;
+      lastGoodFlights = flights;
       setSourceStatus('ok', `${source.name} · ${flights.length} ac`);
       return flights;
     } catch(e) { lastFetchErrors.push(`${source.name}: ${e.message}`); }
   }
 
-  // All failed
+  // All failed — keep showing last known real data if we have it
+  if (lastGoodFlights.length > 0) {
+    setSourceStatus('warn', `Stale data · ${lastGoodFlights.length} ac (retrying)`);
+    return lastGoodFlights;
+  }
+
+  // Truly no data ever — show demo
   const errSummary = lastFetchErrors.join(' | ');
   setSourceStatus('warn', 'Demo · tap SOURCE for details');
   const el = document.getElementById('status-source');
