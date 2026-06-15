@@ -870,6 +870,14 @@
       </div>
       <div class="hstat-label">Radius nm</div>
     </div>
+    <div class="hstat">
+      <div class="hstat-val radius-inline">
+        <button class="radius-btn" onclick="adjustChimeRadius(-1)">−</button>
+        <span id="stat-chime-radius">15</span>
+        <button class="radius-btn" onclick="adjustChimeRadius(1)">+</button>
+      </div>
+      <div class="hstat-label" style="color:var(--amber)">Alert nm</div>
+    </div>
   </div>
   <div class="location-label" onclick="openLocModal()" title="Click to change location">
     <div class="dot"></div>
@@ -1010,7 +1018,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.5';
+const VERSION = 'v2.6';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1235,6 +1243,14 @@ let animFrame = null;
 let RADAR_RADIUS_NM = CONFIG.radarRadiusNm;
 let CHIME_RADIUS_NM = CONFIG.chimeRadiusNm;
 function RADIUS_KM() { return RADAR_RADIUS_NM * 1.852; }
+
+// Load saved preferences
+try {
+  const savedRadar = localStorage.getItem('skyframe_radar_radius');
+  const savedChime = localStorage.getItem('skyframe_chime_radius');
+  if (savedRadar) RADAR_RADIUS_NM = Math.max(25, Math.min(300, parseFloat(savedRadar)));
+  if (savedChime) CHIME_RADIUS_NM = Math.max(1, Math.min(20, parseFloat(savedChime)));
+} catch(_) {}
 
 const REFRESH_MS = 30000;
 let appInitialized = false;
@@ -1808,6 +1824,17 @@ async function refresh() {
 
 function updateRadiusStat() {
   document.getElementById('stat-radius').textContent = Math.round(RADAR_RADIUS_NM);
+  document.getElementById('stat-chime-radius').textContent = Math.round(CHIME_RADIUS_NM);
+  document.getElementById('chime-radius-label').textContent = `▶ <${CHIME_RADIUS_NM}nm`;
+}
+
+function adjustChimeRadius(delta) {
+  CHIME_RADIUS_NM = Math.max(1, Math.min(20, CHIME_RADIUS_NM + delta));
+  updateRadiusStat();
+  // Clear chime log so planes in new zone get announced
+  chimeLog.clear();
+  // Save to localStorage
+  try { localStorage.setItem('skyframe_chime_radius', CHIME_RADIUS_NM); } catch(_) {}
 }
 
 // ── RENDER LIST ──
@@ -2775,7 +2802,7 @@ function renderRetroBoard() {
 function adjustRadius(deltaNm) {
   RADAR_RADIUS_NM = Math.max(25, Math.min(300, RADAR_RADIUS_NM + deltaNm));
   updateRadiusStat();
-  // Re-fetch with new radius
+  try { localStorage.setItem('skyframe_radar_radius', RADAR_RADIUS_NM); } catch(_) {}
   refresh();
 }
 
