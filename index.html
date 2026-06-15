@@ -1018,7 +1018,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.9';
+const VERSION = 'v3.0';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1721,6 +1721,7 @@ function parseAdsbLol(ac) {
       vert_rate: a.baro_rate ? Math.round(a.baro_rate).toString() : null,
       squawk: a.squawk || '—',
       aircraft_type: a.t || null,   // ICAO type code e.g. "B738"
+      mil: a.mil,                    // military flag from Worker (tar1090-db)
       dist_km: haversine(myLat, myLon, a.lat, a.lon),
     }))
     .filter(f => f.dist_km <= RADIUS_KM())
@@ -1785,6 +1786,7 @@ function parseFlightsOpenSky(states) {
       true_track: s[10] || 0,
       vert_rate: s[11] ? (s[11] * 196.85).toFixed(0) : null, // m/s → fpm
       squawk: s[14] || '—',
+      mil: undefined,               // OpenSky doesn't tag military
       dist_km: haversine(myLat, myLon, s[6], s[5])
     }))
     .filter(f => f.dist_km <= RADIUS_KM() && !f.on_ground)
@@ -2613,115 +2615,39 @@ canvas.addEventListener('click', e => {
 });
 
 
-// ── MILITARY AIRCRAFT DETECTION ──
-// Three methods: hex range, callsign prefix, known military type codes
+// ── MILITARY DETECTION ──
+// Primary: the Worker tags each aircraft with mil:true/false using the
+// Mictronics tar1090-db (16,896+ verified military hex codes), refreshed weekly.
+// Fallback: callsign prefix matching for aircraft not in the database.
 
-const MILITARY_HEX_RANGES = [
-  // US DoD specific blocks (FAA assigned to military)
-  [0xADF000, 0xAFFFFF], // US military primary block
-  [0xA9F000, 0xA9FFFF], // DoD supplemental
-  // NATO / allied military
-  [0x3A0000, 0x3BFFFF], // Germany military
-  [0x440000, 0x447FFF], // UK military (RAF)
-  [0x43C000, 0x43CFFF], // UK military additional
+const MIL_CALLSIGN_PREFIXES = [
+  'RCH','REACH','SAM','SPAR','EVAC','MEDEVAC',
+  'GHOST','VIPER','COBRA','HAWK','EAGLE','DOOM',
+  'BUFF','RAVEN','RIVET','AWACS','JOLLY','MAGIC',
+  'TOPAZ','ROCKY','ATLAS','BOXER','RANGER',
 ];
 
-const MILITARY_CALLSIGN_PREFIXES = [
-  'RCH',   // Air Mobility Command airlift (Reach)
-  'REACH', // AMC alternate
-  'PACK',  // KC-135 tanker
-  'GHOST', // B-2 / stealth
-  'VIPER', // F-16
-  'COBRA', // Attack helo / fighter
-  'KNIFE', // Special ops
-  'HAWK',  // Various fighters
-  'EAGLE', // F-15
-  'BULLY', // F-15
-  'SAM',   // Special Air Mission (VIP/POTUS support)
-  'SPAR',  // SecDef transport
-  'EVAC',  // Medical evacuation
-  'MEDEVAC',
-  'DOOM',  // B-52
-  'BUFF',  // B-52 (Big Ugly Fat Fellow)
-  'IRON',  // Various
-  'STEEL',
-  'FURY',
-  'STORM',
-  'RAVEN', // EW/recon
-  'RIVET', // RC-135 recon (Rivet Joint)
-  'JSTARS',// E-8 ground surveillance
-  'AWACS', // E-3 Sentry
-  'JOLLY', // Combat rescue HH-60
-  'PEDRO', // Combat rescue
-  'ROCKY',
-  'TANK',  // Tanker generic
-  'ATLAS', // C-17 AMC
-  'GLOBE', // C-17 AMC
-  'BOXER',
-  'RANGER',
-  'MAGIC', // AWACS callsign
-  'TOPAZ', // Recon
-  'SPORT', // T-38 trainer
-  'GUNFIGHTER', // F-16
-];
-
-const MILITARY_TYPE_CODES = new Set([
-  // Heavy transport — no civilian equivalent
-  'C17','C5M','C5','KC135','K35R','K35E','KC10','KDC10',
-  // Combat aircraft — exclusively military
-  'B52','B2','F16','F15','F18','F18S','F22','F35','FA18',
-  // Surveillance/special mission — exclusively military
-  'P8','EP3','RC135','E3TF','E8','E6','E4','VC25',
-  // Military transport variants
-  'LC130','MC130','AC130','HC130',
-  // Tiltrotor — exclusively military
-  'V22','MV22','CV22',
-  // Military helicopters — exclusively military designations
-  'AH64','HH60','MH60',
-  // Trainers — exclusively military
-  'T38','T45',
-]);
-
-// Known civilian airline prefixes — never flag these as military
-// even if callsign accidentally matches a military prefix
-const CIVILIAN_PREFIXES = new Set([
+const CIV_PREFIXES = new Set([
   'DAL','UAL','AAL','SWA','JBU','ASA','SKW','FFT','RPA','ENY',
   'PDT','CPZ','EJA','FDX','UPS','WJA','ACA','BAW','DLH','AFR',
   'KLM','IBE','VIR','ETD','QTR','SIA','CPA','ANZ','QFA','THA',
   'CSN','CCA','CHH','CAL','EVA','KAL','AAR','JJA','APJ',
-  'PAT','CAP','CIT','EXE','AIR','JET','FLT','SKY','VIP',
-  'N',   // N-number prefix (GA aircraft) — never military by callsign
+  'PAT','CAP','CIT','AIR','JET',
 ]);
 
 function isMilitary(f) {
+  // Primary: use Worker-tagged flag (from tar1090-db)
+  if (f.mil === true)  return true;
+  if (f.mil === false) return false;
+
+  // Fallback: callsign prefix (when Worker flag is absent)
   const cs = (f.callsign || '').toUpperCase().trim();
-
-  // Never flag known civilian airlines
-  const csPrefix3 = cs.slice(0, 3);
-  const csPrefix2 = cs.slice(0, 2);
-  if (CIVILIAN_PREFIXES.has(csPrefix3) || CIVILIAN_PREFIXES.has(csPrefix2)) return false;
-  // N-numbers (GA registrations like N1234A) are never military
+  if (!cs) return false;
+  if (CIV_PREFIXES.has(cs.slice(0, 3))) return false;
   if (/^N\d/.test(cs)) return false;
-
-  // 1. Check ICAO hex range
-  const hexVal = parseInt((f.icao24 || ''), 16);
-  if (!isNaN(hexVal)) {
-    for (const [lo, hi] of MILITARY_HEX_RANGES) {
-      if (hexVal >= lo && hexVal <= hi) return true;
-    }
+  for (const prefix of MIL_CALLSIGN_PREFIXES) {
+    if (cs.startsWith(prefix)) return true;
   }
-
-  // 2. Check callsign prefix against military list
-  if (cs) {
-    for (const prefix of MILITARY_CALLSIGN_PREFIXES) {
-      if (cs.startsWith(prefix)) return true;
-    }
-  }
-
-  // 3. Check aircraft type code
-  const t = (f.aircraft_type || '').toUpperCase();
-  if (t && MILITARY_TYPE_CODES.has(t)) return true;
-
   return false;
 }
 
