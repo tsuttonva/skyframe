@@ -1010,7 +1010,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.4';
+const VERSION = 'v2.5';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -2619,15 +2619,20 @@ const MILITARY_CALLSIGN_PREFIXES = [
 ];
 
 const MILITARY_TYPE_CODES = new Set([
+  // Heavy transport — no civilian equivalent
   'C17','C5M','C5','KC135','K35R','K35E','KC10','KDC10',
+  // Combat aircraft — exclusively military
   'B52','B2','F16','F15','F18','F18S','F22','F35','FA18',
+  // Surveillance/special mission — exclusively military
   'P8','EP3','RC135','E3TF','E8','E6','E4','VC25',
-  'C130','LC130','MC130','AC130','HC130',
-  'V22','MV22','CV22','CH47','CH53','UH60','HH60','MH60',
-  'AH64','OH58','UH1','H60','H47','H53',
-  'C12','U2','SR71','RQ4','MQ9','MQ1',
-  'T38','T6','T45','T1',
-  'C21','C37','C40','C32','C20',
+  // Military transport variants
+  'LC130','MC130','AC130','HC130',
+  // Tiltrotor — exclusively military
+  'V22','MV22','CV22',
+  // Military helicopters — exclusively military designations
+  'AH64','HH60','MH60',
+  // Trainers — exclusively military
+  'T38','T45',
 ]);
 
 // Known civilian airline prefixes — never flag these as military
@@ -2637,6 +2642,7 @@ const CIVILIAN_PREFIXES = new Set([
   'PDT','CPZ','EJA','FDX','UPS','WJA','ACA','BAW','DLH','AFR',
   'KLM','IBE','VIR','ETD','QTR','SIA','CPA','ANZ','QFA','THA',
   'CSN','CCA','CHH','CAL','EVA','KAL','AAR','JJA','APJ',
+  'PAT','CAP','CIT','EXE','AIR','JET','FLT','SKY','VIP',
   'N',   // N-number prefix (GA aircraft) — never military by callsign
 ]);
 
