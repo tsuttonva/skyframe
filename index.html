@@ -1010,7 +1010,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v2.2';
+const VERSION = 'v2.3';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1917,14 +1917,14 @@ function applyEnrichment(data) {
   // Route
   if (data.origin) {
     document.getElementById('dc-origin-code').textContent = data.origin.iata || data.origin.icao || '—';
-    document.getElementById('dc-origin-name').textContent = data.origin.name || '';
+    document.getElementById('dc-origin-name').textContent = data.origin.city || data.origin.name || '';
   } else {
     document.getElementById('dc-origin-code').textContent = '—';
     document.getElementById('dc-origin-name').textContent = 'Unknown';
   }
   if (data.dest) {
     document.getElementById('dc-dest-code').textContent = data.dest.iata || data.dest.icao || '—';
-    document.getElementById('dc-dest-name').textContent = data.dest.name || '';
+    document.getElementById('dc-dest-name').textContent = data.dest.city || data.dest.name || '';
   } else {
     document.getElementById('dc-dest-code').textContent = '—';
     document.getElementById('dc-dest-name').textContent = 'Unknown';
@@ -1937,6 +1937,12 @@ function applyEnrichment(data) {
     if (!cur.includes('/')) {
       document.getElementById('dc-icao').textContent = data.registration + ' / ' + cur;
     }
+  }
+  // Status (FlightAware — delayed, diverted, etc.)
+  if (data.status) {
+    document.getElementById('dc-aircraft').textContent =
+      (data.aircraft || '—') + `  ⚠ ${data.status}`;
+    document.getElementById('dc-aircraft').style.color = 'var(--amber)';
   }
 }
 
@@ -1966,10 +1972,18 @@ async function fetchEnrichment(f) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planes: [{ callsign: cs, lat: f.lat, lng: f.lon }] }),
-            }, 6000);
+            }, 8000);
             if (rr.ok) {
               const rd = await rr.json();
-              if (rd && rd[0] && rd[0].airport_codes) {
+              // FlightAware format (from Worker v2)
+              if (rd.source === 'flightaware' && rd.origin) {
+                result.origin = { iata: rd.origin.iata, name: rd.origin.name || rd.origin.iata, city: rd.origin.city };
+                result.dest   = { iata: rd.destination?.iata, name: rd.destination?.name || rd.destination?.iata, city: rd.destination?.city };
+                if (rd.status && rd.status !== 'En Route') result.status = rd.status;
+                if (rd.departure_delay > 300) result.status = `Delayed ${Math.round(rd.departure_delay/60)}min`;
+              }
+              // adsb.lol routeset format (array with airport_codes)
+              else if (Array.isArray(rd) && rd[0]?.airport_codes) {
                 const parts = rd[0].airport_codes.split('-');
                 if (parts[0]) result.origin = { iata: parts[0], name: rd[0].originIata || parts[0] };
                 if (parts[1]) result.dest   = { iata: parts[1], name: rd[0].destinationIata || parts[1] };
