@@ -818,6 +818,23 @@
   .chime-toggle:hover { background: rgba(255,184,48,0.1); }
   .chime-toggle.muted { border-color: var(--text-muted); color: var(--text-muted); }
 
+/* U-2 Dragon Lady detected — the house should shake */
+@keyframes u2-shake-kf {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  10%  { transform: translate(-6px, -4px) rotate(-0.5deg); }
+  20%  { transform: translate(7px, 3px) rotate(0.6deg); }
+  30%  { transform: translate(-8px, 5px) rotate(-0.7deg); }
+  40%  { transform: translate(6px, -5px) rotate(0.5deg); }
+  50%  { transform: translate(-5px, 4px) rotate(-0.4deg); }
+  60%  { transform: translate(7px, -3px) rotate(0.5deg); }
+  70%  { transform: translate(-4px, 3px) rotate(-0.3deg); }
+  80%  { transform: translate(3px, -2px) rotate(0.2deg); }
+  90%  { transform: translate(-2px, 1px) rotate(-0.1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+body.u2-shake {
+  animation: u2-shake-kf 1.1s ease-out;
+}
 </style>
 </head>
 <body>
@@ -1018,7 +1035,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v3.9';
+const VERSION = 'v4.0';
 
 // Clear stale Census API cache if present
 try {
@@ -1425,10 +1442,31 @@ function speakFlight(f, nm) {
   queueSpeech(text);
 }
 
+const u2Log = new Set(); // icao24s already announced as U-2 this session
+const balloonLog = new Set();
+
 function checkChimes(newFlights) {
   if (!CONFIG.chimeEnabled) return;
   newFlights.forEach(f => {
     const nm = nmFromKm(f.dist_km);
+    const cat = getAircraftCategory(f);
+
+    // U-2 Dragon Lady — always announce regardless of alert radius, this is rare and legendary
+    if (cat === 'u2' && !u2Log.has(f.icao24)) {
+      u2Log.add(f.icao24);
+      triggerU2Event(f, nm);
+      return;
+    }
+
+    // Balloon — announce once when first detected within radar range
+    if (cat === 'balloon' && !balloonLog.has(f.icao24)) {
+      balloonLog.add(f.icao24);
+      playChime();
+      if (CONFIG.voiceEnabled) {
+        queueSpeech(`High altitude balloon detected. ${Math.round(f.alt_baro || 0).toLocaleString()} feet. ${Math.round(nm)} miles.`, 0.85, 1.0);
+      }
+    }
+
     if (nm <= CHIME_RADIUS_NM && !chimeLog.has(f.icao24)) {
       chimeLog.add(f.icao24);
       playChime();
@@ -1443,6 +1481,23 @@ function checkChimes(newFlights) {
     const f = flights.find(x => x.icao24 === icao);
     if (!f || nmFromKm(f.dist_km) > CHIME_RADIUS_NM * 1.2) chimeLog.delete(icao);
   });
+}
+
+function triggerU2Event(f, nm) {
+  // Screen shake — the house should shake when a U-2 appears
+  document.body.classList.add('u2-shake');
+  setTimeout(() => document.body.classList.remove('u2-shake'), 1200);
+
+  // Dramatic double chime
+  playChime();
+  setTimeout(playChime, 200);
+  setTimeout(playChime, 400);
+
+  if (CONFIG.voiceEnabled) {
+    setTimeout(() => {
+      queueSpeech(`Lockheed U-2. Dragon Lady. Altitude ${Math.round(f.alt_baro || 0).toLocaleString()} feet. ${Math.round(nm)} miles out.`, 0.78, 0.85);
+    }, 700);
+  }
 }
 
 // Test audio from footer button
@@ -1988,7 +2043,14 @@ function selectFlight(f) {
   setRouteLoading();
 
   // Show local type lookup immediately (no API call needed)
-  if (f.aircraft_type) {
+  const cat = getAircraftCategory(f);
+  if (cat === 'u2') {
+    document.getElementById('dc-aircraft').textContent = 'U-2 — Lockheed U-2 Dragon Lady ★';
+    document.getElementById('dc-aircraft').style.color = '#ffd700';
+  } else if (cat === 'balloon') {
+    document.getElementById('dc-aircraft').textContent = 'BALL — High-Altitude Balloon';
+    document.getElementById('dc-aircraft').style.color = '#b388ff';
+  } else if (f.aircraft_type) {
     const localName = lookupIcaoType(f.aircraft_type);
     const localStr = localName ? `${f.aircraft_type} — ${localName}` : f.aircraft_type;
     document.getElementById('dc-aircraft').textContent = localStr;
@@ -2055,6 +2117,16 @@ async function fetchEnrichment(f) {
   const key = f.icao24;
   if (enrichCache[key]) {
     applyEnrichment(enrichCache[key]);
+    return;
+  }
+
+  // Balloons and U-2s never have commercial route data — skip the API calls
+  const cat = getAircraftCategory(f);
+  if (cat === 'balloon' || cat === 'u2') {
+    document.getElementById('dc-origin-code').textContent = '—';
+    document.getElementById('dc-origin-name').textContent = cat === 'balloon' ? 'No fixed route' : 'Classified';
+    document.getElementById('dc-dest-code').textContent = '—';
+    document.getElementById('dc-dest-name').textContent = cat === 'balloon' ? 'Drifting with wind' : 'Classified';
     return;
   }
 
@@ -2581,25 +2653,53 @@ function drawRadar() {
       }
     }
 
-    // Plane icon — emergency=red, military=gold, otherwise normal
+    // Plane icon — emergency=red, U-2=dramatic gold pulse, balloon=violet, military=gold, otherwise normal
     const isEmergency = EMERGENCY_SQUAWKS[f.squawk];
     const cat = getAircraftCategory(f);
+    const isU2 = cat === 'u2';
+    const isBalloon = cat === 'balloon';
+
     if (isEmergency && !isSelected) {
       const flashOn = Math.floor(Date.now() / 500) % 2 === 0;
       drawPlane(ctx, px, py, f.true_track || 0, false, false, flashOn ? '#ff3355' : 'rgba(255,51,85,0.3)', cat);
+    } else if (isU2 && !isSelected) {
+      // Dramatic pulsing gold-white for the legendary U-2
+      const pulse = (Math.sin(Date.now() / 200) + 1) / 2; // 0..1
+      const r = Math.round(255);
+      const g = Math.round(184 + (255-184) * pulse);
+      const b = Math.round(48 + (255-48) * pulse);
+      drawPlane(ctx, px, py, f.true_track || 0, false, false, `rgb(${r},${g},${b})`, cat);
+    } else if (isBalloon && !isSelected) {
+      drawPlane(ctx, px, py, f.true_track || 0, false, false, '#b388ff', cat);
     } else if (f.is_military && !isSelected && !isTracked) {
       drawPlane(ctx, px, py, f.true_track || 0, false, false, '#e8c84a', cat);
     } else {
       drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked, null, cat);
     }
 
+    // U-2 gets an extra pulsing glow ring — this is a legendary aircraft
+    if (isU2 && !isSelected) {
+      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, 14 + pulse * 6, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,215,0,${0.3 + pulse * 0.4})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // ATC Data Block
     if (showDataBlock.has(f.icao24)) {
       const isEmerg = EMERGENCY_SQUAWKS[f.squawk];
       const color = isEmerg ? '#ff3355'
+        : isU2 ? '#ffd700'
+        : isBalloon ? '#b388ff'
         : f.is_military && !isSelected && !isTracked ? '#e8c84a'
         : isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen(0.9);
       const dimColor = isEmerg ? 'rgba(255,51,85,0.6)'
+        : isU2 ? 'rgba(255,215,0,0.6)'
+        : isBalloon ? 'rgba(179,136,255,0.6)'
         : f.is_military && !isSelected && !isTracked ? 'rgba(232,200,74,0.6)'
         : isTracked ? radarAmber(0.6) : isSelected ? radarBlue(0.6) : radarGreen(0.55);
 
@@ -2661,6 +2761,15 @@ function drawRadar() {
 
 function getAircraftCategory(f) {
   const t = (f.aircraft_type || '').toUpperCase();
+  const cs = (f.callsign || '').toUpperCase().trim();
+
+  // High-altitude balloon — verified via callsign prefix OR FAA type code
+  // (Aerostar Thunderhead / former Google Loon HBAL platforms)
+  if (cs.startsWith('HBAL') || t === 'BALL') return 'balloon';
+
+  // U-2 Dragon Lady — verified via ICAO type code only (no inference)
+  if (t === 'U2' || t === 'TU2') return 'u2';
+
   if (!t) return 'jet';
   // Helicopters
   if (t.startsWith('H') || t.match(/^(EC|S76|S92|R22|R44|AS3|AW1|AW1|BK1|CH4|CH5|UH6)/)) return 'helo';
@@ -2684,7 +2793,33 @@ function drawPlane(ctx, x, y, heading, isSelected, isTracked, overrideColor, cat
   ctx.fillStyle = color;
   ctx.lineWidth = 1.5;
 
-  if (category === 'helo') {
+  if (category === 'balloon') {
+    // Balloon shape: round envelope + basket line, no rotation applied visually
+    ctx.rotate(-heading * Math.PI / 180); // cancel rotation — balloons don't have heading orientation
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.3, size * 0.85, 0, Math.PI * 2);
+    ctx.stroke();
+    // Basket
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.3, size * 0.4);
+    ctx.lineTo(-size * 0.25, size * 0.75);
+    ctx.lineTo(size * 0.25, size * 0.75);
+    ctx.lineTo(size * 0.3, size * 0.4);
+    ctx.stroke();
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.3, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (category === 'u2') {
+    // U-2 Dragon Lady — distinctive long thin glider-like wings
+    ctx.beginPath(); ctx.moveTo(0, -size * 1.2); ctx.lineTo(0, size * 0.8); ctx.stroke();
+    // Very long thin wings (U-2 has a massive wingspan relative to fuselage)
+    ctx.beginPath(); ctx.moveTo(-size * 2.0, -size * 0.05); ctx.lineTo(size * 2.0, -size * 0.05); ctx.stroke();
+    // Small tail
+    ctx.beginPath(); ctx.moveTo(-size * 0.35, size * 0.8); ctx.lineTo(size * 0.35, size * 0.8); ctx.stroke();
+    // Nose
+    ctx.beginPath(); ctx.arc(0, -size * 1.2, 2, 0, Math.PI * 2); ctx.fill();
+  } else if (category === 'helo') {
     // Rotor disc + tail rotor
     ctx.beginPath();
     ctx.moveTo(-size * 1.3, 0);
