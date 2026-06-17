@@ -873,6 +873,42 @@ body.u2-shake {
   border-color: #ff3355 !important;
   color: #ff5577 !important;
 }
+.alert-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  background: rgba(20,14,4,0.9);
+  border: 1.5px solid #ffb830;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-family: 'Share Tech Mono', monospace;
+  text-align: center;
+  pointer-events: none;
+  animation: alert-toast-in 0.25s ease-out, alert-toast-out 0.4s ease-in 4.6s forwards;
+}
+.alert-toast-title {
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #ffb830;
+  text-shadow: 0 0 6px rgba(255,184,48,0.6);
+}
+.alert-toast-detail {
+  font-size: 10px;
+  color: #d9c08a;
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+@keyframes alert-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes alert-toast-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
 </style>
 </head>
 <body>
@@ -951,6 +987,10 @@ body.u2-shake {
   <canvas id="radar"></canvas>
   <div class="demo-banner" id="demo-banner" style="display:none;">
     <span id="demo-banner-text">DEMO MODE</span>
+  </div>
+  <div class="alert-toast" id="alert-toast" style="display:none;">
+    <div class="alert-toast-title" id="alert-toast-title"></div>
+    <div class="alert-toast-detail" id="alert-toast-detail"></div>
   </div>
   <div class="map-tooltip" id="map-tooltip">
     <div class="tip-callsign" id="tt-callsign"></div>
@@ -1083,7 +1123,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v5.2';
+const VERSION = 'v5.4';
 
 // Clear stale Census API cache if present
 try {
@@ -1502,6 +1542,8 @@ function triggerLegendEvent(f, nm, cat) {
   }[cat];
   if (!info) return;
 
+  showAlertToast(`★ ${info.name.toUpperCase()}`, `${f.callsign} · ${Math.round(nm)} nm · ${Math.round(f.baro_alt||0).toLocaleString()} ft`);
+
   // Screen shake — intensity matches prestige
   document.body.classList.add('u2-shake');
   setTimeout(() => document.body.classList.remove('u2-shake'), 800 * info.shakes / 3);
@@ -1542,6 +1584,7 @@ function checkChimes(newFlights) {
     if (cat === 'balloon' && !balloonLog.has(f.icao24)) {
       balloonLog.add(f.icao24);
       playChime();
+      showAlertToast('⬤ HIGH-ALTITUDE BALLOON', `${f.callsign} · ${Math.round(nm)} nm · ${Math.round(f.baro_alt||0).toLocaleString()} ft`);
       if (CONFIG.voiceEnabled) {
         queueSpeech(`High altitude balloon detected. ${Math.round(f.alt_baro || 0).toLocaleString()} feet. ${Math.round(nm)} miles.`, 0.85, 1.0);
       }
@@ -1551,6 +1594,7 @@ function checkChimes(newFlights) {
       chimeLog.add(f.icao24);
       playChime();
       if (f.is_military) {
+        showAlertToast('MILITARY AIRCRAFT', `${f.callsign} · ${Math.round(nm)} nm · ${Math.round(f.baro_alt||0).toLocaleString()} ft`);
         // Play the fun easter egg first, then announce what we're actually
         // looking at — type, distance, altitude — so it's not just a gag
         // with zero context about why we got excited.
@@ -1558,6 +1602,7 @@ function checkChimes(newFlights) {
           if (CONFIG.voiceEnabled) speakFlight(f, nm);
         });
       } else if (CONFIG.voiceEnabled) {
+        showAlertToast(f.callsign, `${Math.round(nm)} nm · ${Math.round(f.baro_alt||0).toLocaleString()} ft`);
         speakFlight(f, nm);
       }
     }
@@ -1568,7 +1613,29 @@ function checkChimes(newFlights) {
   });
 }
 
+// Shows a brief on-screen toast confirming what just triggered an alert.
+// Lingers for 5 seconds so it's still readable even after the aircraft
+// that caused it has moved on (especially relevant in demo mode, where
+// aircraft are continuously moving and may have left the alert ring by
+// the time someone looks at the screen).
+let alertToastTimer = null;
+function showAlertToast(title, detail) {
+  const el = document.getElementById('alert-toast');
+  document.getElementById('alert-toast-title').textContent = title;
+  document.getElementById('alert-toast-detail').textContent = detail || '';
+  // Restart the CSS animation by forcing a reflow
+  el.style.display = 'none';
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.display = 'block';
+  el.style.animation = '';
+  if (alertToastTimer) clearTimeout(alertToastTimer);
+  alertToastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
 function triggerU2Event(f, nm) {
+  showAlertToast('★ U-2 DRAGON LADY', `${f.callsign} · ${Math.round(nm)} nm · ${Math.round(f.baro_alt||0).toLocaleString()} ft`);
+
   // Screen shake — the house should shake when a U-2 appears
   document.body.classList.add('u2-shake');
   setTimeout(() => document.body.classList.remove('u2-shake'), 1200);
@@ -2017,9 +2084,9 @@ function seedAmbientTraffic(count) {
 function spawnMilitaryTransit() {
   const milTemplates = [
     { cs: 'RCH405', alt: 28000, spd: 410, type: 'C17' },
-    { cs: 'SAM142',  alt: 32000, spd: 430, type: 'B752' },
     { cs: 'VIPER22', alt: 24000, spd: 460, type: 'F16'  },
     { cs: 'GHOST31', alt: 41000, spd: 480, type: 'B2'   },
+    { cs: 'REAPER1', alt: 22000, spd: 230, type: 'MQ9'  },
   ];
   const t = milTemplates[Math.floor(Math.random()*milTemplates.length)];
   const angle = Math.random() * Math.PI * 2;
