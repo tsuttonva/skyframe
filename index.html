@@ -1035,7 +1035,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v4.0';
+const VERSION = 'v4.1';
 
 // Clear stale Census API cache if present
 try {
@@ -1442,8 +1442,33 @@ function speakFlight(f, nm) {
   queueSpeech(text);
 }
 
-const u2Log = new Set(); // icao24s already announced as U-2 this session
+const u2Log = new Set();
 const balloonLog = new Set();
+const legendLog = new Set(); // AF1, B-52, AWACS
+
+function triggerLegendEvent(f, nm, cat) {
+  const info = {
+    af1:   { name: 'Air Force One',           desc: 'VC-25. The President's aircraft. Air Force One.',         shakes: 3 },
+    b52:   { name: 'B-52 Stratofortress',      desc: 'B-52 Stratofortress. Still flying after 70 years.',       shakes: 2 },
+    awacs: { name: 'E-3 AWACS',               desc: 'E-3 Sentry AWACS. Eyes in the sky.',                      shakes: 2 },
+  }[cat];
+  if (!info) return;
+
+  // Screen shake — intensity matches prestige
+  document.body.classList.add('u2-shake');
+  setTimeout(() => document.body.classList.remove('u2-shake'), 800 * info.shakes / 3);
+
+  // Chimes — number matches prestige
+  for (let i = 0; i < info.shakes; i++) {
+    setTimeout(playChime, i * 220);
+  }
+
+  if (CONFIG.voiceEnabled) {
+    setTimeout(() => {
+      queueSpeech(`${info.desc} ${Math.round(nm)} miles out.`, 0.80, 0.88);
+    }, info.shakes * 220 + 300);
+  }
+}
 
 function checkChimes(newFlights) {
   if (!CONFIG.chimeEnabled) return;
@@ -1451,10 +1476,17 @@ function checkChimes(newFlights) {
     const nm = nmFromKm(f.dist_km);
     const cat = getAircraftCategory(f);
 
-    // U-2 Dragon Lady — always announce regardless of alert radius, this is rare and legendary
+    // U-2 Dragon Lady — always announce regardless of alert radius
     if (cat === 'u2' && !u2Log.has(f.icao24)) {
       u2Log.add(f.icao24);
       triggerU2Event(f, nm);
+      return;
+    }
+
+    // Other legendary aircraft — always announce regardless of alert radius
+    if ((cat === 'af1' || cat === 'b52' || cat === 'awacs') && !legendLog.has(f.icao24)) {
+      legendLog.add(f.icao24);
+      triggerLegendEvent(f, nm, cat);
       return;
     }
 
@@ -2047,6 +2079,15 @@ function selectFlight(f) {
   if (cat === 'u2') {
     document.getElementById('dc-aircraft').textContent = 'U-2 — Lockheed U-2 Dragon Lady ★';
     document.getElementById('dc-aircraft').style.color = '#ffd700';
+  } else if (cat === 'af1') {
+    document.getElementById('dc-aircraft').textContent = 'VC-25 — Air Force One ★';
+    document.getElementById('dc-aircraft').style.color = '#00eaff';
+  } else if (cat === 'b52') {
+    document.getElementById('dc-aircraft').textContent = 'B-52 — Stratofortress ★';
+    document.getElementById('dc-aircraft').style.color = '#ff6600';
+  } else if (cat === 'awacs') {
+    document.getElementById('dc-aircraft').textContent = 'E-3 — AWACS Sentry ★';
+    document.getElementById('dc-aircraft').style.color = '#00ff44';
   } else if (cat === 'balloon') {
     document.getElementById('dc-aircraft').textContent = 'BALL — High-Altitude Balloon';
     document.getElementById('dc-aircraft').style.color = '#b388ff';
@@ -2122,11 +2163,18 @@ async function fetchEnrichment(f) {
 
   // Balloons and U-2s never have commercial route data — skip the API calls
   const cat = getAircraftCategory(f);
-  if (cat === 'balloon' || cat === 'u2') {
+  if (cat === 'balloon' || cat === 'u2' || cat === 'af1' || cat === 'b52' || cat === 'awacs') {
+    const labels = {
+      balloon: ['No fixed route',  'Drifting with wind'],
+      u2:      ['Classified',      'Classified'],
+      af1:     ['Joint Base Andrews', 'As directed'],
+      b52:     ['Minot / Barksdale / Dyess', 'Training mission'],
+      awacs:   ['Tinker AFB OK',   'Training orbit'],
+    }[cat] || ['—','—'];
     document.getElementById('dc-origin-code').textContent = '—';
-    document.getElementById('dc-origin-name').textContent = cat === 'balloon' ? 'No fixed route' : 'Classified';
+    document.getElementById('dc-origin-name').textContent = labels[0];
     document.getElementById('dc-dest-code').textContent = '—';
-    document.getElementById('dc-dest-name').textContent = cat === 'balloon' ? 'Drifting with wind' : 'Classified';
+    document.getElementById('dc-dest-name').textContent = labels[1];
     return;
   }
 
@@ -2656,19 +2704,27 @@ function drawRadar() {
     // Plane icon — emergency=red, U-2=dramatic gold pulse, balloon=violet, military=gold, otherwise normal
     const isEmergency = EMERGENCY_SQUAWKS[f.squawk];
     const cat = getAircraftCategory(f);
-    const isU2 = cat === 'u2';
+    const isU2      = cat === 'u2';
     const isBalloon = cat === 'balloon';
+    const isAF1     = cat === 'af1';
+    const isB52     = cat === 'b52';
+    const isAWACS   = cat === 'awacs';
+    const isLegend  = isU2 || isAF1 || isB52 || isAWACS;
+
+    // Color assignments — each legend aircraft gets a distinct identity
+    const LEGEND_COLOR = {
+      u2:    () => { const p=(Math.sin(Date.now()/200)+1)/2; return `rgb(255,${Math.round(184+(255-184)*p)},${Math.round(48+(255-48)*p)})`; },
+      af1:   () => '#00eaff',  // Presidential blue-white
+      b52:   () => '#ff6600',  // Old iron orange
+      awacs: () => '#00ff44',  // Brighter green — eyes in the sky
+    };
 
     if (isEmergency && !isSelected) {
       const flashOn = Math.floor(Date.now() / 500) % 2 === 0;
       drawPlane(ctx, px, py, f.true_track || 0, false, false, flashOn ? '#ff3355' : 'rgba(255,51,85,0.3)', cat);
-    } else if (isU2 && !isSelected) {
-      // Dramatic pulsing gold-white for the legendary U-2
-      const pulse = (Math.sin(Date.now() / 200) + 1) / 2; // 0..1
-      const r = Math.round(255);
-      const g = Math.round(184 + (255-184) * pulse);
-      const b = Math.round(48 + (255-48) * pulse);
-      drawPlane(ctx, px, py, f.true_track || 0, false, false, `rgb(${r},${g},${b})`, cat);
+    } else if (isLegend && !isSelected) {
+      const color = LEGEND_COLOR[cat] ? LEGEND_COLOR[cat]() : radarGreen();
+      drawPlane(ctx, px, py, f.true_track || 0, false, false, color, cat);
     } else if (isBalloon && !isSelected) {
       drawPlane(ctx, px, py, f.true_track || 0, false, false, '#b388ff', cat);
     } else if (f.is_military && !isSelected && !isTracked) {
@@ -2677,13 +2733,17 @@ function drawRadar() {
       drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked, null, cat);
     }
 
-    // U-2 gets an extra pulsing glow ring — this is a legendary aircraft
-    if (isU2 && !isSelected) {
-      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
+    // Legend aircraft get a pulsing glow ring
+    if (isLegend && !isSelected) {
+      const pulse = (Math.sin(Date.now() / (isAF1 ? 300 : 200)) + 1) / 2;
+      const glowColor = isAF1 ? `rgba(0,234,255,${0.25+pulse*0.45})` :
+                        isB52 ? `rgba(255,102,0,${0.25+pulse*0.4})` :
+                        isAWACS ? `rgba(0,255,68,${0.2+pulse*0.4})` :
+                        `rgba(255,215,0,${0.3+pulse*0.4})`;
       ctx.save();
       ctx.beginPath();
       ctx.arc(px, py, 14 + pulse * 6, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,215,0,${0.3 + pulse * 0.4})`;
+      ctx.strokeStyle = glowColor;
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
@@ -2693,12 +2753,18 @@ function drawRadar() {
     if (showDataBlock.has(f.icao24)) {
       const isEmerg = EMERGENCY_SQUAWKS[f.squawk];
       const color = isEmerg ? '#ff3355'
-        : isU2 ? '#ffd700'
+        : isU2    ? '#ffd700'
+        : isAF1   ? '#00eaff'
+        : isB52   ? '#ff6600'
+        : isAWACS ? '#00ff44'
         : isBalloon ? '#b388ff'
         : f.is_military && !isSelected && !isTracked ? '#e8c84a'
         : isTracked ? '#ffb830' : isSelected ? radarBlue() : radarGreen(0.9);
       const dimColor = isEmerg ? 'rgba(255,51,85,0.6)'
-        : isU2 ? 'rgba(255,215,0,0.6)'
+        : isU2    ? 'rgba(255,215,0,0.6)'
+        : isAF1   ? 'rgba(0,234,255,0.6)'
+        : isB52   ? 'rgba(255,102,0,0.6)'
+        : isAWACS ? 'rgba(0,255,68,0.6)'
         : isBalloon ? 'rgba(179,136,255,0.6)'
         : f.is_military && !isSelected && !isTracked ? 'rgba(232,200,74,0.6)'
         : isTracked ? radarAmber(0.6) : isSelected ? radarBlue(0.6) : radarGreen(0.55);
@@ -2770,6 +2836,16 @@ function getAircraftCategory(f) {
   // U-2 Dragon Lady — verified via ICAO type code only (no inference)
   if (t === 'U2' || t === 'TU2') return 'u2';
 
+  // Air Force One — VC-25A, verified via known tail numbers (82-8000 and 92-9000)
+  // hex codes: ADF9D2 (82-8000), ADF9D7 (92-9000) — publicly documented
+  if (t === 'VC25' || f.icao24 === 'adf9d2' || f.icao24 === 'adf9d7') return 'af1';
+
+  // B-52 Stratofortress — still flying, broadcasts ADS-B on training missions
+  if (t === 'B52' || t === 'B52H') return 'b52';
+
+  // AWACS E-3 Sentry — flying radar dome, training missions regularly visible
+  if (t === 'E3CF' || t === 'E3TF' || t === 'E3' || t === 'E3B' || t === 'E3C') return 'awacs';
+
   if (!t) return 'jet';
   // Helicopters
   if (t.startsWith('H') || t.match(/^(EC|S76|S92|R22|R44|AS3|AW1|AW1|BK1|CH4|CH5|UH6)/)) return 'helo';
@@ -2811,14 +2887,54 @@ function drawPlane(ctx, x, y, heading, isSelected, isTracked, overrideColor, cat
     ctx.arc(0, -size * 0.3, 1.5, 0, Math.PI * 2);
     ctx.fill();
   } else if (category === 'u2') {
-    // U-2 Dragon Lady — distinctive long thin glider-like wings
+    // U-2 Dragon Lady — very long thin glider wings
     ctx.beginPath(); ctx.moveTo(0, -size * 1.2); ctx.lineTo(0, size * 0.8); ctx.stroke();
-    // Very long thin wings (U-2 has a massive wingspan relative to fuselage)
     ctx.beginPath(); ctx.moveTo(-size * 2.0, -size * 0.05); ctx.lineTo(size * 2.0, -size * 0.05); ctx.stroke();
-    // Small tail
     ctx.beginPath(); ctx.moveTo(-size * 0.35, size * 0.8); ctx.lineTo(size * 0.35, size * 0.8); ctx.stroke();
-    // Nose
     ctx.beginPath(); ctx.arc(0, -size * 1.2, 2, 0, Math.PI * 2); ctx.fill();
+
+  } else if (category === 'af1') {
+    // VC-25 Air Force One — 747 shape with wide wings + 4 engine pods
+    ctx.beginPath(); ctx.moveTo(0, -size * 1.1); ctx.lineTo(0, size * 0.8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-size * 1.6, size * 0.15); ctx.lineTo(size * 1.6, size * 0.15); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-size * 0.7, size * 0.8); ctx.lineTo(size * 0.7, size * 0.8); ctx.stroke();
+    // 4 engine pods (747 has 4)
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-size * 1.3, size * 0.05); ctx.lineTo(-size * 1.05, size * 0.05); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-size * 0.8, size * 0.1); ctx.lineTo(-size * 0.6, size * 0.1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(size * 0.6, size * 0.1); ctx.lineTo(size * 0.8, size * 0.1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(size * 1.05, size * 0.05); ctx.lineTo(size * 1.3, size * 0.05); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, -size * 1.1, 2.5, 0, Math.PI * 2); ctx.fill();
+
+  } else if (category === 'b52') {
+    // B-52 Stratofortress — swept wings with 8 engines in 4 pairs
+    ctx.beginPath(); ctx.moveTo(0, -size * 1.0); ctx.lineTo(0, size * 0.7); ctx.stroke();
+    // Swept wings (characteristic B-52 look)
+    ctx.beginPath(); ctx.moveTo(0, -size * 0.2); ctx.lineTo(-size * 1.5, size * 0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -size * 0.2); ctx.lineTo(size * 1.5, size * 0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-size * 0.55, size * 0.7); ctx.lineTo(size * 0.55, size * 0.7); ctx.stroke();
+    // 4 engine pod pairs
+    ctx.lineWidth = 2;
+    for (const ex of [-1.2, -0.85, 0.85, 1.2]) {
+      const ey = ex < 0 ? (Math.abs(ex) - 0.2) * 0.4 * size - size*0.05 : (ex - 0.2) * 0.4 * size - size*0.05;
+      ctx.beginPath(); ctx.arc(ex * size * 0.78, ey * 0.7, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, -size * 1.0, 2, 0, Math.PI * 2); ctx.fill();
+
+  } else if (category === 'awacs') {
+    // E-3 AWACS — standard jet body + distinctive rotodome disc on top
+    ctx.beginPath(); ctx.moveTo(0, -size * 1.0); ctx.lineTo(0, size * 0.7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-size * 1.2, size * 0.1); ctx.lineTo(size * 1.2, size * 0.1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-size * 0.5, size * 0.7); ctx.lineTo(size * 0.5, size * 0.7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -size * 0.05, 2, 0, Math.PI * 2); ctx.fill();
+    // The rotodome — the distinctive disc that makes AWACS unmistakable
+    ctx.beginPath();
+    ctx.ellipse(0, -size * 0.9, size * 0.85, size * 0.18, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -size * 1.0, 2, 0, Math.PI * 2); ctx.fill();
+
   } else if (category === 'helo') {
     // Rotor disc + tail rotor
     ctx.beginPath();
