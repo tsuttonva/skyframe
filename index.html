@@ -1018,7 +1018,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v3.4';
+const VERSION = 'v3.5';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -2575,15 +2575,14 @@ function drawRadar() {
 
     // Plane icon — emergency=red, military=gold, otherwise normal
     const isEmergency = EMERGENCY_SQUAWKS[f.squawk];
+    const cat = getAircraftCategory(f);
     if (isEmergency && !isSelected) {
-      // Flash red for emergency squawks
       const flashOn = Math.floor(Date.now() / 500) % 2 === 0;
-      if (flashOn) drawPlane(ctx, px, py, f.true_track || 0, false, false, '#ff3355');
-      else drawPlane(ctx, px, py, f.true_track || 0, false, false, 'rgba(255,51,85,0.3)');
+      drawPlane(ctx, px, py, f.true_track || 0, false, false, flashOn ? '#ff3355' : 'rgba(255,51,85,0.3)', cat);
     } else if (f.is_military && !isSelected && !isTracked) {
-      drawPlane(ctx, px, py, f.true_track || 0, false, false, '#e8c84a');
+      drawPlane(ctx, px, py, f.true_track || 0, false, false, '#e8c84a', cat);
     } else {
-      drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked);
+      drawPlane(ctx, px, py, f.true_track || 0, isSelected, isTracked, null, cat);
     }
 
     // ATC Data Block
@@ -2666,8 +2665,8 @@ function getAircraftCategory(f) {
   return 'jet';
 }
 
-function drawPlane(ctx, x, y, heading, isSelected, isTracked, overrideColor) {
-  const category = arguments[7] || 'jet'; // optional 8th arg
+function drawPlane(ctx, x, y, heading, isSelected, isTracked, overrideColor, category) {
+  category = category || 'jet';
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(heading * Math.PI / 180);
@@ -2972,17 +2971,29 @@ function topoFeatureToLatLon(topo, geometry) {
   const translate = topo.transform ? topo.transform.translate : [0, 0];
   const rings = [];
 
+  function decodeArc(arcIdx) {
+    // Each arc has its OWN delta accumulator starting from 0
+    const reversed = arcIdx < 0;
+    const arc = topo.arcs[reversed ? ~arcIdx : arcIdx];
+    if (!arc) return [];
+    let x = 0, y = 0;
+    const pts = arc.map(pt => {
+      x += pt[0]; y += pt[1];
+      return [x * scale[0] + translate[0], y * scale[1] + translate[1]];
+    });
+    return reversed ? pts.reverse() : pts;
+  }
+
   function decodeRing(arcIdxs) {
+    // Join multiple arcs into one ring, skipping duplicate join points
     const pts = [];
     for (const arcIdx of arcIdxs) {
-      const reversed = arcIdx < 0;
-      const arc = topo.arcs[reversed ? ~arcIdx : arcIdx];
-      if (!arc) continue;
-      let x = 0, y = 0;
-      const rawPts = reversed ? [...arc].reverse() : arc;
-      for (const pt of rawPts) {
-        x += pt[0]; y += pt[1];
-        pts.push([x * scale[0] + translate[0], y * scale[1] + translate[1]]);
+      const arcPts = decodeArc(arcIdx);
+      if (pts.length > 0 && arcPts.length > 0) {
+        // Skip first point of subsequent arcs (duplicate of last point)
+        pts.push(...arcPts.slice(1));
+      } else {
+        pts.push(...arcPts);
       }
     }
     return pts;
