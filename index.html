@@ -1018,7 +1018,7 @@
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v3.3';
+const VERSION = 'v3.4';
 
 const WORKER_URL = 'https://skyframe.tom-tsutton.workers.dev';
 
@@ -1661,7 +1661,7 @@ const SOURCES = [
   {
     name: 'SkyFrame Worker',
     fetch: (lat, lon, dist) =>
-      tryFetch(`${WORKER_URL}/flights?lat=${lat}&lon=${lon}&dist=${dist}`, {}, 15000),
+      tryFetch(`${WORKER_URL}/flights?lat=${lat}&lon=${lon}&dist=${dist}`, {}, 20000),
     parse: async (resp) => {
       const d = await resp.json();
       if (!Array.isArray(d.ac)) throw new Error('bad shape');
@@ -1669,7 +1669,7 @@ const SOURCES = [
     }
   },
   {
-    // Direct fallback — only used if Worker is completely down
+    // Direct fallback — bypasses Worker if it's struggling
     name: 'ADS-B (lol) direct',
     fetch: (lat, lon, dist) => tryFetch(`https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${dist}`, {}, 10000),
     parse: async (resp) => { const d = await resp.json(); if (!Array.isArray(d.ac)) throw new Error('bad shape'); return { flights: parseAdsbLol(d.ac) }; }
@@ -1682,6 +1682,8 @@ const SOURCES = [
 ];
 
 let lastGoodFlights = []; // keep last known real data
+let workerFailCount = 0;  // consecutive Worker failures
+const WORKER_FAIL_THRESHOLD = 2; // switch away from Worker after this many failures
 
 async function fetchFlights() {
   const dist = Math.ceil(RADAR_RADIUS_NM);
@@ -1690,8 +1692,8 @@ async function fetchFlights() {
   const margin = Math.max(2.5, RADIUS_KM() / 111);
   lastFetchErrors = [];
 
-  // Try working source first, then all others
-  const ordered = workingSource
+  // If Worker has failed repeatedly, deprioritize it temporarily
+  const ordered = (workingSource && workerFailCount < WORKER_FAIL_THRESHOLD)
     ? [SOURCES.find(s => s.name === workingSource), ...SOURCES.filter(s => s.name !== workingSource)].filter(Boolean)
     : SOURCES;
 
@@ -1700,17 +1702,26 @@ async function fetchFlights() {
       const resp = await source.fetch(lat, lon, dist, margin);
       if (!resp.ok) { lastFetchErrors.push(`${source.name}: HTTP ${resp.status}`); continue; }
       const { flights } = await source.parse(resp);
-      // Only reject if we previously had lots of planes and now get zero
-      // (suggests a bad response, not genuinely empty airspace)
       if (lastGoodFlights.length > 20 && flights.length === 0) {
         lastFetchErrors.push(`${source.name}: returned 0 flights (suspicious, had ${lastGoodFlights.length} before)`);
         continue;
       }
+      // Success — reset failure count, lock to this source
       workingSource = source.name;
+      workerFailCount = 0;
       lastGoodFlights = flights;
       setSourceStatus('ok', `${source.name} · ${flights.length} ac`);
       return flights;
-    } catch(e) { lastFetchErrors.push(`${source.name}: ${e.message}`); }
+    } catch(e) {
+      lastFetchErrors.push(`${source.name}: ${e.message}`);
+      // Track Worker failures specifically
+      if (source.name === 'SkyFrame Worker') {
+        workerFailCount++;
+        if (workerFailCount >= WORKER_FAIL_THRESHOLD) {
+          workingSource = null; // unlock so we try others first
+        }
+      }
+    }
   }
 
   // All failed — keep showing last known real data if we have it
