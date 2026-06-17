@@ -511,6 +511,16 @@
     letter-spacing: 6px;
   }
 
+  .load-version {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    margin-top: 4px;
+    margin-bottom: 14px;
+    opacity: 0.7;
+  }
+
   .load-text {
     font-family: 'Share Tech Mono', monospace;
     font-size: 12px;
@@ -835,6 +845,34 @@
 body.u2-shake {
   animation: u2-shake-kf 1.1s ease-out;
 }
+.demo-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  background: rgba(20,4,4,0.88);
+  border: 2px solid #ff3355;
+  border-radius: 6px;
+  padding: 6px 22px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: #ff5577;
+  text-shadow: 0 0 8px rgba(255,51,85,0.8);
+  animation: demo-pulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes demo-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(255,51,85,0.4); }
+  50% { opacity: 0.75; box-shadow: 0 0 18px rgba(255,51,85,0.7); }
+}
+.active-toggle {
+  background: rgba(255,51,85,0.18) !important;
+  border-color: #ff3355 !important;
+  color: #ff5577 !important;
+}
 </style>
 </head>
 <body>
@@ -858,6 +896,7 @@ body.u2-shake {
 
 <div id="loading">
   <div class="load-logo">◈ SKYFRAME</div>
+  <div class="load-version" id="load-version"></div>
   <div class="load-text">ACQUIRING LOCATION...</div>
 </div>
 
@@ -910,6 +949,9 @@ body.u2-shake {
 
 <main class="map-area">
   <canvas id="radar"></canvas>
+  <div class="demo-banner" id="demo-banner" style="display:none;">
+    <span id="demo-banner-text">DEMO MODE</span>
+  </div>
   <div class="map-tooltip" id="map-tooltip">
     <div class="tip-callsign" id="tt-callsign"></div>
     <div class="tip-row"><span>ALT</span><span id="tt-alt"></span></div>
@@ -1020,6 +1062,12 @@ body.u2-shake {
     <span id="chime-radius-label" style="font-size:9px;color:var(--amber);margin-left:4px;">▶ &lt;15nm</span>
   </div>
   <div class="status-item">
+    <button class="theme-toggle" onclick="forceRefresh()" title="Force an immediate data refresh">⟳ REFRESH</button>
+  </div>
+  <div class="status-item">
+    <button class="theme-toggle" id="demo-toggle" onclick="toggleDemoMode()" title="Showcase demo with military, balloons, and legendary aircraft">🎬 DEMO</button>
+  </div>
+  <div class="status-item">
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">◑ RETRO</button>
   </div>
   <div class="status-item">
@@ -1035,7 +1083,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v4.2';
+const VERSION = 'v5.0';
 
 // Clear stale Census API cache if present
 try {
@@ -1551,6 +1599,7 @@ updateClock();
 
 // Set version display
 document.getElementById('ver-label').textContent = VERSION;
+document.getElementById('load-version').textContent = VERSION;
 
 // ── LOCATION MODAL ──
 let locationSet = false;
@@ -1629,6 +1678,15 @@ async function applyLocation(lat, lon, label) {
     workingSource = null;
     lastGoodFlights = []; // clear stale data from old location
     enrichCache && Object.keys(enrichCache).forEach(k => delete enrichCache[k]);
+    if (demoMode === 'showcase') {
+      // Re-seed the show around the new location, keep the show running
+      demoFlights = seedAmbientTraffic(14);
+      return;
+    }
+    if (demoMode === 'fallback') {
+      demoFlights = seedAmbientTraffic(10);
+      return;
+    }
     if (locationSet && appInitialized) {
       // Reset refresh timer so next auto-refresh is 30s from now
       if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
@@ -1782,14 +1840,16 @@ let lastGoodFlights = []; // keep last known real data
 let workerFailCount = 0;  // consecutive Worker failures
 const WORKER_FAIL_THRESHOLD = 2; // switch away from Worker after this many failures
 
-async function fetchFlights() {
+// Raw attempt at real data — tries the source chain once, returns null on total failure.
+// Never falls back to demo itself; that's the caller's job. Used both by the normal
+// refresh cycle and by the fallback-demo background retry.
+async function fetchFlightsReal() {
   const dist = Math.ceil(RADAR_RADIUS_NM);
   const lat = myLat.toFixed(4);
   const lon = myLon.toFixed(4);
   const margin = Math.max(2.5, RADIUS_KM() / 111);
   lastFetchErrors = [];
 
-  // If Worker has failed repeatedly, deprioritize it temporarily
   const ordered = (workingSource && workerFailCount < WORKER_FAIL_THRESHOLD)
     ? [SOURCES.find(s => s.name === workingSource), ...SOURCES.filter(s => s.name !== workingSource)].filter(Boolean)
     : SOURCES;
@@ -1803,7 +1863,6 @@ async function fetchFlights() {
         lastFetchErrors.push(`${source.name}: returned 0 flights (suspicious, had ${lastGoodFlights.length} before)`);
         continue;
       }
-      // Success — reset failure count, lock to this source
       workingSource = source.name;
       workerFailCount = 0;
       lastGoodFlights = flights;
@@ -1811,30 +1870,369 @@ async function fetchFlights() {
       return flights;
     } catch(e) {
       lastFetchErrors.push(`${source.name}: ${e.message}`);
-      // Track Worker failures specifically
       if (source.name === 'SkyFrame Worker') {
         workerFailCount++;
-        if (workerFailCount >= WORKER_FAIL_THRESHOLD) {
-          workingSource = null; // unlock so we try others first
-        }
+        if (workerFailCount >= WORKER_FAIL_THRESHOLD) workingSource = null;
       }
     }
   }
+  return null; // total failure — caller decides what to do
+}
 
-  // All failed — keep showing last known real data if we have it
+async function fetchFlights() {
+  // If we're in showcase demo, the demo loop owns rendering entirely —
+  // this function should not be called, but guard anyway.
+  if (demoMode === 'showcase') return demoFlights;
+
+  let result = await fetchFlightsReal();
+
+  if (result === null) {
+    // First attempt failed completely — give transient blips a second chance
+    // before giving up. Most network hiccups clear within a couple seconds.
+    await new Promise(r => setTimeout(r, 2000));
+    result = await fetchFlightsReal();
+  }
+
+  if (result !== null) {
+    // Success (possibly on retry) — make sure we're not lingering in fallback demo
+    if (demoMode === 'fallback') exitFallbackDemo();
+    return result;
+  }
+
+  // Both attempts failed. Prefer stale real data over demo if we have it.
   if (lastGoodFlights.length > 0) {
     setSourceStatus('warn', `Stale data · ${lastGoodFlights.length} ac (retrying)`);
     return lastGoodFlights;
   }
 
-  // Truly no data ever — show demo
-  const errSummary = lastFetchErrors.join(' | ');
-  setSourceStatus('warn', 'Demo · tap SOURCE for details');
-  const el = document.getElementById('status-source');
-  el.style.cursor = 'pointer';
-  el.onclick = () => alert('Data source errors:\n\n' + errSummary);
-  return generateDemoFlights();
+  // No real data ever received — enter the ambient fallback demo.
+  // enterFallbackDemo() takes over rendering via its own loop; return
+  // current demoFlights so this call site has something to work with.
+  enterFallbackDemo();
+  return demoFlights;
 }
+
+
+// ══════════════════════════════════════════════════════════
+// DEMO ENGINE — two modes sharing one rendering pipeline
+//
+// FALLBACK demo (automatic, on data failure):
+//   - Ambient civilian traffic only, no special events
+//   - Retries real data every few seconds in background
+//   - Silently swaps back to real data the instant it succeeds
+//   - Banner: "DEMO MODE — Reconnecting..."
+//
+// SHOWCASE demo (manual toggle via DEMO button):
+//   - Full choreographed 3-5 min show: military, balloons,
+//     legendary aircraft (U-2/AF1/B52/AWACS), occasional emergency squawk
+//   - Real data fetching fully paused
+//   - Only exits when user taps DEMO again
+//   - Banner: "DEMO MODE"
+//   - Never the same show twice — randomized event selection + timing
+// ══════════════════════════════════════════════════════════
+
+let demoMode = null; // null | 'fallback' | 'showcase'
+let demoFlights = [];
+let demoStartTime = 0;
+let demoEventQueue = [];
+let demoFallbackRetryTimer = null;
+let demoAnimFrame = null;
+
+const DEMO_CIVILIAN_TEMPLATES = [
+  { cs:'UAL2341', alt:35000, spd:465 }, { cs:'DAL1887', alt:38000, spd:488 },
+  { cs:'AAL504',  alt:22000, spd:380 }, { cs:'SWA3301', alt:31000, spd:440 },
+  { cs:'SKW5522', alt:18000, spd:320 }, { cs:'FFT211',  alt:41000, spd:510 },
+  { cs:'JBU1044', alt:36000, spd:472 }, { cs:'ASA887',  alt:28000, spd:410 },
+  { cs:'N7834K',  alt:8500,  spd:142 }, { cs:'EJA552',  alt:43000, spd:495 },
+  { cs:'RPA4471', alt:25000, spd:390 }, { cs:'ENY3382', alt:19000, spd:340 },
+  { cs:'N219QC',  alt:6500,  spd:135 }, { cs:'GJS5104', alt:33000, spd:455 },
+  { cs:'NKS812',  alt:37000, spd:480 }, { cs:'PDT5061', alt:21000, spd:355 },
+];
+
+const DEMO_TYPE_CODES = ['B738','A320','CRJ9','E75L','C172','B38M','A321','PC12','B789'];
+
+function randomHex() {
+  return 'a' + Math.floor(Math.random()*0xfffff).toString(16).padStart(5,'0');
+}
+
+// Each demo flight gets a straight-line path crossing the radar so motion
+// looks real instead of flights popping in/out or orbiting weirdly.
+function makeDemoFlight(template, opts = {}) {
+  const radiusDeg = (RADIUS_KM() / 111) * 1.3; // slightly beyond radar edge
+  const angle = opts.angle != null ? opts.angle : Math.random() * Math.PI * 2;
+  const startDist = radiusDeg * (0.95 + Math.random() * 0.3);
+  const startLat = myLat + Math.sin(angle) * startDist;
+  const startLon = myLon + Math.cos(angle) * startDist / Math.cos(myLat * Math.PI/180);
+  // Heading roughly toward/across center, with some randomness so paths vary
+  const towardCenter = Math.atan2(myLat - startLat, myLon - startLon) * 180 / Math.PI;
+  const heading = (towardCenter + (Math.random()*50 - 25) + 360) % 360;
+
+  return {
+    icao24: opts.icao24 || randomHex(),
+    callsign: opts.callsign || template.cs,
+    country: 'United States',
+    lat: startLat,
+    lon: startLon,
+    baro_alt: opts.alt || (template.alt + Math.round((Math.random()-0.5)*1000)),
+    on_ground: false,
+    velocity: opts.spd || (template.spd + Math.round((Math.random()-0.5)*20)),
+    true_track: heading,
+    vert_rate: '0',
+    squawk: opts.squawk || (1000 + Math.floor(Math.random()*6000)).toString(),
+    aircraft_type: opts.aircraft_type || DEMO_TYPE_CODES[Math.floor(Math.random()*DEMO_TYPE_CODES.length)],
+    mil: opts.mil || false,
+    is_military: opts.mil || false,
+    _demoSpeedDegPerSec: (opts.spd || template.spd) * 1.852 / 3600 / 111, // knots → deg/sec roughly
+    _demoHeadingRad: heading * Math.PI / 180,
+    _demoExpiresAt: opts.expiresAt || null, // for transient events like emergency squawk
+    dist_km: 0, // computed each frame
+  };
+}
+
+function recomputeDemoDistances() {
+  demoFlights.forEach(f => {
+    f.dist_km = haversine(myLat, myLon, f.lat, f.lon);
+  });
+}
+
+// ── Ambient civilian traffic — used in BOTH modes ──
+function seedAmbientTraffic(count) {
+  const shuffled = [...DEMO_CIVILIAN_TEMPLATES].sort(() => Math.random() - 0.5);
+  const flights = [];
+  for (let i = 0; i < count; i++) {
+    const t = shuffled[i % shuffled.length];
+    const angle = (i / count) * Math.PI * 2 + (Math.random()*0.5 - 0.25);
+    flights.push(makeDemoFlight(t, { angle, callsign: t.cs + (i >= shuffled.length ? Math.floor(i/shuffled.length) : '') }));
+  }
+  return flights;
+}
+
+// ── Showcase event definitions ──
+// Each returns a flight object (or array) to inject, with optional duration
+function spawnMilitaryTransit() {
+  const milTemplates = [
+    { cs: 'RCH405', alt: 28000, spd: 410, type: 'C17' },
+    { cs: 'SAM142',  alt: 32000, spd: 430, type: 'B752' },
+    { cs: 'VIPER22', alt: 24000, spd: 460, type: 'F16'  },
+    { cs: 'GHOST31', alt: 41000, spd: 480, type: 'B2'   },
+  ];
+  const t = milTemplates[Math.floor(Math.random()*milTemplates.length)];
+  const angle = Math.random() * Math.PI * 2;
+  return makeDemoFlight({cs:t.cs, alt:t.alt, spd:t.spd}, { angle, mil: true, aircraft_type: t.type, squawk: '4000' });
+}
+
+function spawnBalloon() {
+  const angle = Math.random() * Math.PI * 2;
+  return makeDemoFlight({cs:'HBAL'+(700+Math.floor(Math.random()*99)), alt:66000, spd:8},
+    { angle, aircraft_type: 'BALL', squawk: '4452' });
+}
+
+function spawnLegend(kind) {
+  const defs = {
+    u2:    { cs: 'ARMY01', alt: 68000, spd: 410, type: 'U2'   },
+    af1:   { cs: 'AF1',    alt: 38000, spd: 480, type: 'VC25', icao24: 'adf9d2' },
+    b52:   { cs: 'DOOM12', alt: 32000, spd: 440, type: 'B52'  },
+    awacs: { cs: 'MAGIC03',alt: 29000, spd: 360, type: 'E3CF' },
+  };
+  const d = defs[kind];
+  const angle = Math.random() * Math.PI * 2;
+  return makeDemoFlight({cs:d.cs, alt:d.alt, spd:d.spd}, { angle, mil: kind !== 'af1', aircraft_type: d.type, icao24: d.icao24, squawk: '4000' });
+}
+
+function spawnEmergencySquawk() {
+  // Pick a random existing ambient flight and give it an emergency squawk briefly
+  const candidates = demoFlights.filter(f => !f.mil && f.aircraft_type !== 'BALL' && f.aircraft_type !== 'U2');
+  if (candidates.length === 0) return null;
+  const f = candidates[Math.floor(Math.random() * candidates.length)];
+  const squawks = ['7700','7600','7500'];
+  f.squawk = squawks[Math.floor(Math.random()*squawks.length)];
+  f._demoEmergencyUntil = Date.now() + 18000; // resolves after 18s
+  return null; // mutates existing flight, doesn't add a new one
+}
+
+// ── Build the randomized showcase timeline ──
+// Returns an array of { delayMs, fn } events spread across DEMO_SHOW_DURATION
+const DEMO_SHOW_DURATION_MS = 3 * 60 * 1000 + Math.random() * 2 * 60 * 1000; // 3-5 min
+
+function buildShowcaseTimeline() {
+  const events = [];
+  const duration = DEMO_SHOW_DURATION_MS;
+
+  // Always at least one military transit
+  events.push({ t: 8000 + Math.random()*15000, fn: () => injectDemoFlight(spawnMilitaryTransit()) });
+
+  // ~60% chance of a second military transit later in the show
+  if (Math.random() < 0.6) {
+    events.push({ t: duration*0.5 + Math.random()*duration*0.3, fn: () => injectDemoFlight(spawnMilitaryTransit()) });
+  }
+
+  // ~50% chance of a balloon appearing
+  if (Math.random() < 0.5) {
+    events.push({ t: duration*0.2 + Math.random()*duration*0.5, fn: () => injectDemoFlight(spawnBalloon()) });
+  }
+
+  // ~35% chance of ONE legendary aircraft (never more than one per show — keep it special)
+  if (Math.random() < 0.35) {
+    const legends = ['u2','af1','b52','awacs'];
+    const pick = legends[Math.floor(Math.random()*legends.length)];
+    events.push({ t: duration*0.35 + Math.random()*duration*0.4, fn: () => injectDemoFlight(spawnLegend(pick)) });
+  }
+
+  // ~25% chance of a brief emergency squawk moment
+  if (Math.random() < 0.25) {
+    events.push({ t: duration*0.4 + Math.random()*duration*0.4, fn: () => spawnEmergencySquawk() });
+  }
+
+  return events.sort((a,b) => a.t - b.t);
+}
+
+function injectDemoFlight(f) {
+  if (Array.isArray(f)) demoFlights.push(...f);
+  else if (f) demoFlights.push(f);
+}
+
+// ── Advance simulation by dt seconds — moves all flights along their heading ──
+function stepDemoSimulation(dtSec) {
+  const now = Date.now();
+  demoFlights = demoFlights.filter(f => {
+    // Remove transient emergency state after it resolves
+    if (f._demoEmergencyUntil && now > f._demoEmergencyUntil) {
+      f.squawk = (1000 + Math.floor(Math.random()*6000)).toString();
+      delete f._demoEmergencyUntil;
+    }
+    // Move along heading
+    const moveDeg = f._demoSpeedDegPerSec * dtSec;
+    f.lat += Math.sin(f._demoHeadingRad) * moveDeg;
+    f.lon += Math.cos(f._demoHeadingRad) * moveDeg / Math.cos(myLat * Math.PI/180);
+    f.dist_km = haversine(myLat, myLon, f.lat, f.lon);
+    // Despawn once well past the far edge
+    return f.dist_km <= RADIUS_DESPAWN_KM();
+  });
+
+  // Replenish ambient traffic if it's thinned out (showcase mode keeps the scene populated)
+  if (demoMode === 'showcase' && demoFlights.filter(f=>!f.mil && f.aircraft_type!=='BALL' && f.aircraft_type!=='U2').length < 10) {
+    const t = DEMO_CIVILIAN_TEMPLATES[Math.floor(Math.random()*DEMO_CIVILIAN_TEMPLATES.length)];
+    injectDemoFlight(makeDemoFlight(t, { angle: Math.random()*Math.PI*2 }));
+  }
+  if (demoMode === 'fallback' && demoFlights.length < 8) {
+    const t = DEMO_CIVILIAN_TEMPLATES[Math.floor(Math.random()*DEMO_CIVILIAN_TEMPLATES.length)];
+    injectDemoFlight(makeDemoFlight(t, { angle: Math.random()*Math.PI*2 }));
+  }
+}
+
+function RADIUS_DESPAWN_KM() { return RADIUS_KM() * 1.6; }
+
+// ── Main demo loop — runs render + simulation at ~1Hz, independent of fetch cycle ──
+let demoLoopInterval = null;
+let demoLastStepTs = 0;
+
+function startDemoLoop() {
+  demoLastStepTs = Date.now();
+  if (demoLoopInterval) clearInterval(demoLoopInterval);
+  demoLoopInterval = setInterval(() => {
+    const now = Date.now();
+    const dtSec = (now - demoLastStepTs) / 1000;
+    demoLastStepTs = now;
+
+    stepDemoSimulation(dtSec);
+
+    // Fire any due showcase events
+    if (demoMode === 'showcase') {
+      const elapsed = now - demoStartTime;
+      while (demoEventQueue.length && demoEventQueue[0].t <= elapsed) {
+        const ev = demoEventQueue.shift();
+        try { ev.fn(); } catch(_) {}
+      }
+    }
+
+    flights = demoFlights;
+    checkChimes(flights);
+    checkEmergency(flights);
+    render();
+    document.getElementById('status-update').textContent = new Date().toISOString().slice(11,19) + ' Z';
+  }, 1000);
+}
+
+function stopDemoLoop() {
+  if (demoLoopInterval) { clearInterval(demoLoopInterval); demoLoopInterval = null; }
+}
+
+// ── PUBLIC: enter fallback demo (automatic, on data failure) ──
+function enterFallbackDemo() {
+  if (demoMode === 'showcase') return; // never interrupt an intentional show
+  if (demoMode === 'fallback') return; // already in it
+  demoMode = 'fallback';
+  demoFlights = seedAmbientTraffic(10);
+  demoEventQueue = []; // no special events in fallback mode — ever
+  showDemoBanner('DEMO MODE — Reconnecting…');
+
+  // Stop the normal refresh cycle — the demo loop owns rendering now,
+  // and the background retry timer below owns checking for real data.
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  startDemoLoop();
+
+  // Keep trying real data quietly in the background
+  if (demoFallbackRetryTimer) clearInterval(demoFallbackRetryTimer);
+  demoFallbackRetryTimer = setInterval(async () => {
+    if (demoMode !== 'fallback') return; // user may have switched to showcase
+    try {
+      const real = await fetchFlightsReal(); // raw attempt, no demo fallback inside
+      if (real !== null) {
+        // Success — silently swap back
+        flights = real;
+        lastGoodFlights = real;
+        exitFallbackDemo();
+        checkChimes(flights);
+        checkEmergency(flights);
+        render();
+      }
+    } catch(_) {}
+  }, 4000);
+}
+
+function exitFallbackDemo() {
+  if (demoMode !== 'fallback') return;
+  demoMode = null;
+  stopDemoLoop();
+  if (demoFallbackRetryTimer) { clearInterval(demoFallbackRetryTimer); demoFallbackRetryTimer = null; }
+  hideDemoBanner();
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refresh, REFRESH_MS);
+}
+
+// ── PUBLIC: manual showcase toggle ──
+function toggleDemoMode() {
+  if (demoMode === 'showcase') {
+    // Exit showcase — resume real data immediately
+    demoMode = null;
+    stopDemoLoop();
+    hideDemoBanner();
+    document.getElementById('demo-toggle').classList.remove('active-toggle');
+    if (refreshTimer) clearInterval(refreshTimer);
+    refresh().then(() => { refreshTimer = setInterval(refresh, REFRESH_MS); });
+  } else {
+    // Entering showcase — pause real fetching entirely, exit fallback if active
+    if (demoFallbackRetryTimer) { clearInterval(demoFallbackRetryTimer); demoFallbackRetryTimer = null; }
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    demoMode = 'showcase';
+    demoStartTime = Date.now();
+    demoFlights = seedAmbientTraffic(14);
+    demoEventQueue = buildShowcaseTimeline();
+    showDemoBanner('DEMO MODE');
+    document.getElementById('demo-toggle').classList.add('active-toggle');
+    startDemoLoop();
+  }
+}
+
+function showDemoBanner(text) {
+  const b = document.getElementById('demo-banner');
+  document.getElementById('demo-banner-text').textContent = text;
+  b.style.display = 'block';
+}
+function hideDemoBanner() {
+  document.getElementById('demo-banner').style.display = 'none';
+}
+
 
 function parseAdsbLol(ac) {
   return ac
@@ -1866,41 +2264,6 @@ function setSourceStatus(level, text) {
   el.textContent = text;
 }
 
-function generateDemoFlights() {
-  // Realistic-looking flights scattered around myLat/myLon
-  const templates = [
-    { cs:'UAL2341', country:'United States', alt:35000, spd:465, hdg:275, vr:0 },
-    { cs:'DAL1887', country:'United States', alt:38000, spd:488, hdg:92,  vr:0 },
-    { cs:'AAL504',  country:'United States', alt:22000, spd:380, hdg:183, vr:-800 },
-    { cs:'SWA3301', country:'United States', alt:31000, spd:440, hdg:315, vr:0 },
-    { cs:'SKW5522', country:'United States', alt:18000, spd:320, hdg:55,  vr:1200 },
-    { cs:'FFT211',  country:'United States', alt:41000, spd:510, hdg:260, vr:0 },
-    { cs:'JBU1044', country:'United States', alt:36000, spd:472, hdg:130, vr:0 },
-    { cs:'ASA887',  country:'United States', alt:28000, spd:410, hdg:345, vr:-400 },
-    { cs:'N7834K',  country:'United States', alt:8500,  spd:142, hdg:220, vr:0 },
-    { cs:'EJA552',  country:'United States', alt:43000, spd:495, hdg:80,  vr:0 },
-  ];
-  return templates.map((t, i) => {
-    const angle = (i / templates.length) * Math.PI * 2 + Math.random() * 0.4;
-    const dist  = 0.3 + Math.random() * 0.6; // fraction of radius
-    const latOff = Math.sin(angle) * dist * 2.2;
-    const lonOff = Math.cos(angle) * dist * 2.5;
-    return {
-      icao24: 'a' + Math.floor(Math.random()*0xfffff).toString(16).padStart(5,'0'),
-      callsign: t.cs,
-      country: t.country,
-      lat: myLat + latOff,
-      lon: myLon + lonOff,
-      baro_alt: t.alt + Math.round((Math.random()-0.5)*1000),
-      on_ground: false,
-      velocity: t.spd + Math.round((Math.random()-0.5)*20),
-      true_track: (t.hdg + Math.round((Math.random()-0.5)*10) + 360) % 360,
-      vert_rate: (t.vr + Math.round((Math.random()-0.5)*100)).toFixed(0),
-      squawk: (1000 + Math.floor(Math.random()*6000)).toString(),
-      dist_km: haversine(myLat, myLon, myLat+latOff, myLon+lonOff),
-    };
-  }).filter(f => f.dist_km <= RADIUS_KM()).sort((a,b) => a.dist_km - b.dist_km);
-}
 
 function parseFlightsOpenSky(states) {
   return states
@@ -1936,6 +2299,14 @@ function haversine(lat1, lon1, lat2, lon2) {
 function kmToNm(km) { return (km * 0.539957).toFixed(1); }
 
 // ── INIT ──
+function forceRefresh() {
+  if (demoMode === 'showcase') return; // showcase ignores manual refresh — it's not real data
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  refresh().then(() => {
+    if (demoMode !== 'fallback') refreshTimer = setInterval(refresh, REFRESH_MS);
+  });
+}
+
 async function init() {
   setLoadText('CONNECTING TO OPENSKY...');
   loadMapGeo();
@@ -1949,10 +2320,15 @@ async function init() {
   checkEmergency(flights);
   render();
   startRadar();
-  refreshTimer = setInterval(refresh, REFRESH_MS);
+  // Only start the normal refresh cycle if we're NOT in fallback demo —
+  // enterFallbackDemo() already started its own loop and owns refreshTimer.
+  if (demoMode !== 'fallback') {
+    refreshTimer = setInterval(refresh, REFRESH_MS);
+  }
 }
 
 async function refresh() {
+  if (demoMode === 'showcase') return; // demo loop owns rendering, never call this
   const newFlights = await fetchFlights();
   checkChimes(newFlights);
   checkEmergency(newFlights);
@@ -3358,11 +3734,12 @@ function adjustRadius(deltaNm) {
     // Shrinking — re-filter existing flights instantly, no fetch
     flights = flights.filter(f => f.dist_km <= RADIUS_KM());
     render();
-    // Reset timer so next auto-refresh is a clean 30s from now
+    if (demoMode === 'showcase' || demoMode === 'fallback') return; // demo loop handles its own timing
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
     refreshTimer = setInterval(refresh, REFRESH_MS);
   } else {
-    // Expanding — reset source lock and fetch immediately
+    // Expanding
+    if (demoMode === 'showcase' || demoMode === 'fallback') return; // demo flights regenerate naturally each tick
     workingSource = null;
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
     refresh().then(() => { refreshTimer = setInterval(refresh, REFRESH_MS); });
