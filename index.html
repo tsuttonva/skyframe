@@ -1083,7 +1083,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v5.0';
+const VERSION = 'v5.1';
 
 // Clear stale Census API cache if present
 try {
@@ -1648,7 +1648,7 @@ async function resolveLocation() {
         const addr = results[0].address || {};
         const city = addr.city || addr.town || addr.village || addr.county || display_name.split(',')[0].trim();
         const state = addr.state_code || addr.state || '';
-        const country = addr.country_code?.toUpperCase();
+        const country = (addr.country_code ? addr.country_code.toUpperCase() : undefined);
         const shortName = country === 'US'
           ? `${city}${state ? ', '+state : ''}`
           : `${city}${state ? ', '+state : ''}${country ? ', '+country : ''}`;
@@ -1710,9 +1710,9 @@ function useGeoLocation() {
         const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, { headers: { 'Accept-Language': 'en' } });
         if (r.ok) {
           const d = await r.json();
-          const rawCity = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+          const rawCity = (d.address && (d.address.city || d.address.town || d.address.village || d.address.county)) || '';
           const city = rawCity.replace(/^(Village of |Town of |City of |Township of )/i, '');
-          const state = d.address?.state_code || '';
+          const state = (d.address && d.address.state_code) || '';
           const label = city ? `${city}${state ? ', '+state : ''}` : `${lat.toFixed(3)}°N`;
           await applyLocation(lat, lon, label); return;
         }
@@ -1751,9 +1751,9 @@ function getLocation() {
           const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${myLat}&lon=${myLon}&format=json`, { headers: { 'Accept-Language': 'en' } });
           if (r.ok) {
             const d = await r.json();
-            const rawCity = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+            const rawCity = (d.address && (d.address.city || d.address.town || d.address.village || d.address.county)) || '';
             const city = rawCity.replace(/^(Village of |Town of |City of |Township of )/i, '');
-            const state = d.address?.state_code || '';
+            const state = (d.address && d.address.state_code) || '';
             const label = city ? `${city}${state ? ', '+state : ''}` : `${myLat.toFixed(3)}°N`;
             document.getElementById('loc-label').textContent = label;
             try { localStorage.setItem('skyframe_lat', myLat); localStorage.setItem('skyframe_lon', myLon); localStorage.setItem('skyframe_label', label); } catch(_) {}
@@ -2586,12 +2586,12 @@ async function fetchEnrichment(f) {
         // FlightAware format
         if (rd.source === 'flightaware' && rd.origin) {
           result.origin = { iata: rd.origin.iata, name: rd.origin.name || rd.origin.iata, city: rd.origin.city };
-          result.dest   = { iata: rd.destination?.iata, name: rd.destination?.name || rd.destination?.iata, city: rd.destination?.city };
+          result.dest   = { iata: rd.destination ? rd.destination.iata : undefined, name: (rd.destination && (rd.destination.name || rd.destination.iata)), city: rd.destination ? rd.destination.city : undefined };
           if (rd.status && rd.status !== 'En Route') result.status = rd.status;
           if (rd.departure_delay > 300) result.status = `Delayed ${Math.round(rd.departure_delay/60)}min`;
         }
         // adsb.lol routeset format
-        else if (Array.isArray(rd) && rd[0]?.airport_codes) {
+        else if (Array.isArray(rd) && rd[0] && rd[0].airport_codes) {
           const parts = rd[0].airport_codes.split('-');
           if (parts[0]) result.origin = { iata: parts[0], name: rd[0].originIata || parts[0] };
           if (parts[1]) result.dest   = { iata: parts[1], name: rd[0].destinationIata || parts[1] };
@@ -2948,8 +2948,7 @@ function drawRadar() {
       const labelX = cx;
       const labelY = cy + maxR - 22;
       ctx.fillStyle = 'rgba(6,13,20,0.85)';
-      ctx.beginPath();
-      ctx.roundRect(labelX - tw/2 - 10, labelY - 11, tw + 20, 22, 3);
+      drawRoundedRectPath(ctx, labelX - tw/2 - 10, labelY - 11, tw + 20, 22, 3);
       ctx.fill();
       ctx.strokeStyle = 'rgba(0,204,255,0.6)';
       ctx.lineWidth = 1;
@@ -3437,6 +3436,22 @@ function getFipsName(fips) {
   return fipsNames[fips] || null;
 }
 // Convert TopoJSON feature to array of lat/lon polygon rings
+// Manual rounded-rect path — works on all browsers including old Safari
+// (ctx.roundRect is a modern Canvas API not available before ~2022)
+function drawRoundedRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
 function topoFeatureToLatLon(topo, geometry) {
   const scale = topo.transform ? topo.transform.scale : [1, 1];
   const translate = topo.transform ? topo.transform.translate : [0, 0];
@@ -3573,7 +3588,7 @@ canvas.addEventListener('click', e => {
 
   // No plane nearby — check for county/state
   // If same county clicked again, deselect
-  const prevFips = clickedCounty?.fips;
+  const prevFips = clickedCounty ? clickedCounty.fips : undefined;
 
   if (RADAR_RADIUS_NM <= 75) {
     const county = findCountyAtLatLon(clickLat, clickLon);
@@ -3585,7 +3600,7 @@ canvas.addEventListener('click', e => {
 
   const state = findStateAtLatLon(clickLat, clickLon);
   if (state) {
-    clickedCounty = state.name === clickedCounty?.name ? null : { ...state, name: state.name, fips: null };
+    clickedCounty = state.name === (clickedCounty ? clickedCounty.name : undefined) ? null : { ...state, name: state.name, fips: null };
     return;
   }
 
