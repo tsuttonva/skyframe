@@ -1035,7 +1035,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v4.1';
+const VERSION = 'v4.2';
 
 // Clear stale Census API cache if present
 try {
@@ -1448,7 +1448,7 @@ const legendLog = new Set(); // AF1, B-52, AWACS
 
 function triggerLegendEvent(f, nm, cat) {
   const info = {
-    af1:   { name: 'Air Force One',           desc: 'VC-25. The President's aircraft. Air Force One.',         shakes: 3 },
+    af1:   { name: 'Air Force One',           desc: 'VC-25. The President\'s aircraft. Air Force One.',         shakes: 3 },
     b52:   { name: 'B-52 Stratofortress',      desc: 'B-52 Stratofortress. Still flying after 70 years.',       shakes: 2 },
     awacs: { name: 'E-3 AWACS',               desc: 'E-3 Sentry AWACS. Eyes in the sky.',                      shakes: 2 },
   }[cat];
