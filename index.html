@@ -1123,7 +1123,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v5.4';
+const VERSION = 'v5.6';
 
 // Clear stale Census API cache if present
 try {
@@ -1325,7 +1325,57 @@ const ICAO_TYPES = {
   "T204": "Tupolev Tu-204",
   "V22": "Bell Boeing V-22 Osprey",
   "YK40": "Yakovlev Yak-40",
-  "YK42": "Yakovlev Yak-42"
+  "YK42": "Yakovlev Yak-42",
+
+  // ── Piper family (very common GA, was a notable gap) ──
+  "P28A": "Piper PA-28 Cherokee/Archer",
+  "P28B": "Piper PA-28 Cherokee Six",
+  "P28R": "Piper PA-28R Arrow",
+  "P32R": "Piper PA-32 Saratoga",
+  "P32T": "Piper PA-32 Turbo Saratoga",
+  "P46T": "Piper PA-46 Malibu/Meridian",
+  "PA34": "Piper PA-34 Seneca",
+  "PA44": "Piper PA-44 Seminole",
+
+  // ── Epic Aircraft ──
+  "EPIC": "Epic E1000",
+  "E1000": "Epic E1000",
+
+  // ── TBM / Socata turboprops ──
+  "TBM7": "Socata TBM 700",
+  "TBM8": "Daher TBM 850",
+  "TBM9": "Daher TBM 900/930/940",
+
+  // ── Beechcraft (additional models) ──
+  "BE9L": "Beechcraft King Air 90",
+  "BE9T": "Beechcraft King Air 90",
+  "BE33": "Beechcraft Bonanza (33)",
+  "BE36": "Beechcraft Bonanza (36)",
+
+  // ── Mooney ──
+  "M20P": "Mooney M20",
+  "M20T": "Mooney M20 Turbo",
+  "M20V": "Mooney Acclaim",
+
+  // ── Van's Aircraft RV series (homebuilt, common at small fields) ──
+  "RV7":  "Van's RV-7",
+  "RV9":  "Van's RV-9",
+  "RV10": "Van's RV-10",
+
+  // ── Business jets ──
+  "G280": "Gulfstream G280",
+  "CL30": "Bombardier Challenger 300",
+  "CL35": "Bombardier Challenger 350",
+
+  // ── Helicopters ──
+  "H60":  "Sikorsky UH-60 Black Hawk",
+  "AS50": "Airbus AS350 Ecureuil",
+  "EC30": "Airbus EC130",
+  "EC35": "Airbus EC135",
+  "R66":  "Robinson R66",
+
+  // ── Light/very light jets ──
+  "E300": "Embraer Phenom 300",
 };
 
 function lookupIcaoType(code) {
@@ -1462,10 +1512,17 @@ function unlockSpeech() {
 document.addEventListener('touchstart', unlockSpeech, { passive: true });
 document.addEventListener('click', unlockSpeech);
 
-// Re-unlock when app returns to foreground
+// Re-unlock when app returns to foreground.
+// iOS can revoke speech synthesis access after backgrounding, so we can't
+// assume it still works — but we also can't just flip speechReady to false
+// and wait for "the next click," because an alert can fire before any
+// click happens, and that utterance would silently die in the queue
+// (the chime still plays since that's a separate audio path, leaving
+// exactly the "beep beep with no words" symptom). So: re-arm speech
+// immediately, right now, the same way unlockSpeech does — don't wait.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    speechReady = false; // force re-unlock on next tap
+    unlockSpeech(); // re-arm immediately rather than waiting for a future click
     // AudioContext also needs resuming
     if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume();
   }
