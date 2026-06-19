@@ -956,9 +956,9 @@ body.u2-shake {
     </div>
     <div class="hstat">
       <div class="hstat-val radius-inline">
-        <button class="radius-btn" onclick="adjustRadius(-25)">−</button>
+        <button class="radius-btn" onclick="adjustRadius(-1)">−</button>
         <span id="stat-radius">50</span>
-        <button class="radius-btn" onclick="adjustRadius(25)">+</button>
+        <button class="radius-btn" onclick="adjustRadius(1)">+</button>
       </div>
       <div class="hstat-label">Radius nm</div>
     </div>
@@ -1123,7 +1123,7 @@ body.u2-shake {
 // ══════════════════════════════════════════════════════════════
 //  SKYFRAME CONFIG — edit these values for your location
 // ══════════════════════════════════════════════════════════════
-const VERSION = 'v5.6';
+const VERSION = 'v5.7';
 
 // Clear stale Census API cache if present
 try {
@@ -1413,7 +1413,7 @@ function RADIUS_KM() { return RADAR_RADIUS_NM * 1.852; }
 try {
   const savedRadar = localStorage.getItem('skyframe_radar_radius');
   const savedChime = localStorage.getItem('skyframe_chime_radius');
-  if (savedRadar) RADAR_RADIUS_NM = Math.max(25, Math.min(300, parseFloat(savedRadar)));
+  if (savedRadar) RADAR_RADIUS_NM = Math.max(5, Math.min(300, parseFloat(savedRadar)));
   if (savedChime) CHIME_RADIUS_NM = Math.max(1, Math.min(20, parseFloat(savedChime)));
 } catch(_) {}
 
@@ -1465,10 +1465,18 @@ function checkEmergency(flights) {
 // ── AUDIO ENGINE (iOS Safari compatible) ──
 // iOS requires AudioContext to be created/resumed inside a user gesture.
 // We create it once on first interaction and reuse it forever.
+// iOS suspends AudioContext aggressively (screen lock, backgrounding, even
+// brief inactivity). resume() is async — calling it without awaiting the
+// result means playChime() can schedule sound on a context that hasn't
+// actually finished waking up yet, which can silently produce nothing or
+// only partially play. This is the real fix: actually wait for resume to
+// complete before handing back the context.
 let _audioCtx = null;
-function getAudioCtx() {
+async function getAudioCtx() {
   if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  if (_audioCtx.state === 'suspended') {
+    try { await _audioCtx.resume(); } catch(_) {}
+  }
   return _audioCtx;
 }
 
@@ -1528,9 +1536,9 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function playChime() {
+async function playChime() {
   try {
-    const ctx = getAudioCtx();
+    const ctx = await getAudioCtx();
     [[880, 0, 0.12], [1100, 0.18, 0.1]].forEach(([freq, delay, dur]) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
@@ -3874,11 +3882,29 @@ function renderRetroBoard() {
 }
 
 
-function adjustRadius(deltaNm) {
+function radiusStepSize(currentNm) {
+  // Smaller steps near the bottom of the range where small changes matter
+  // more, bigger steps near the top where you're covering huge distances.
+  if (currentNm < 25) return 5;
+  if (currentNm < 100) return 25;
+  return 50;
+}
+
+function adjustRadius(direction) {
   const oldRadius = RADAR_RADIUS_NM;
-  RADAR_RADIUS_NM = Math.max(25, Math.min(300, RADAR_RADIUS_NM + deltaNm));
+  const step = radiusStepSize(oldRadius);
+  RADAR_RADIUS_NM = Math.max(5, Math.min(300, oldRadius + direction * step));
   updateRadiusStat();
   try { localStorage.setItem('skyframe_radar_radius', RADAR_RADIUS_NM); } catch(_) {}
+
+  // The alert ring can never be drawn larger than the radar itself —
+  // if someone shrinks the radius below their current chime radius,
+  // pull the chime radius down to match so the ring stays inside the scope.
+  if (CHIME_RADIUS_NM > RADAR_RADIUS_NM) {
+    CHIME_RADIUS_NM = RADAR_RADIUS_NM;
+    try { localStorage.setItem('skyframe_chime_radius', CHIME_RADIUS_NM); } catch(_) {}
+    updateRadiusStat();
+  }
 
   if (RADAR_RADIUS_NM < oldRadius) {
     // Shrinking — re-filter existing flights instantly, no fetch
